@@ -506,6 +506,33 @@
     background: var(--border);
   }
 
+  /* Scheduler status bar */
+  .scheduler-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 16px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    margin-bottom: 16px;
+    font-size: 0.8rem;
+  }
+  .scheduler-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--muted);
+    flex-shrink: 0;
+  }
+  .scheduler-dot.idle { background: var(--green); }
+  .scheduler-dot.cortando, .scheduler-dot.publicando { background: var(--yellow); animation: pulse 1.5s infinite; }
+  .scheduler-dot.erro { background: var(--red); }
+  .scheduler-dot.offline { background: var(--muted); }
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
+  .scheduler-detail { color: var(--muted); }
+  .scheduler-time { color: var(--muted); font-size: 0.7rem; margin-left: auto; }
+
   /* Toast */
   .toast {
     position: fixed;
@@ -578,6 +605,14 @@
     </div>
   </div>
 
+  <!-- Scheduler Status -->
+  <div class="scheduler-bar" id="schedulerBar">
+    <span class="scheduler-dot" id="schedulerDot"></span>
+    <span><strong>Scheduler:</strong></span>
+    <span class="scheduler-detail" id="schedulerDetail">Verificando...</span>
+    <span class="scheduler-time" id="schedulerTime"></span>
+  </div>
+
   <!-- Config Panel -->
   <div class="config-panel" id="configPanel">
 
@@ -622,6 +657,11 @@
             <option value="public">Public</option>
             <option value="private">Private</option>
           </select>
+        </div>
+        <div class="config-field">
+          <label>Clips por publicacao</label>
+          <input type="number" id="cfgPubMax" min="1" max="50" value="2">
+          <div class="hint">Quantos clips publicar por vez</div>
         </div>
       </div>
       <div style="margin-top: 14px;">
@@ -1105,6 +1145,9 @@ async function loadConfig() {
   hourState.pub = stringToHours(c.pub_horarios || '08:00,11:00,14:00,17:00');
   buildHourPicker('pub');
 
+  // Publicacao
+  if (c.pub_max_por_vez) document.getElementById('cfgPubMax').value = c.pub_max_por_vez;
+
   // Cortes
   if (c.corte_auto) document.getElementById('cfgCorteAuto').value = c.corte_auto;
   if (c.corte_max_por_dia) document.getElementById('cfgCorteMax').value = c.corte_max_por_dia;
@@ -1127,7 +1170,8 @@ async function saveConfig() {
     privacy_padrao: document.getElementById('cfgPrivacy').value,
     corte_auto: document.getElementById('cfgCorteAuto').value,
     corte_horarios: hoursToString('corte'),
-    corte_max_por_dia: document.getElementById('cfgCorteMax').value
+    corte_max_por_dia: document.getElementById('cfgCorteMax').value,
+    pub_max_por_vez: document.getElementById('cfgPubMax').value
   };
 
   try {
@@ -1222,9 +1266,36 @@ async function togglePipeline(target) {
   btn.disabled = false;
 }
 
-async function loadAll() {
-  await Promise.all([loadStats(), loadLives(), loadPublicados(), loadConfig()]);
+async function loadSchedulerStatus() {
+  try {
+    const data = await fetchJson('/api/scheduler/status');
+    const dot = document.getElementById('schedulerDot');
+    const detail = document.getElementById('schedulerDetail');
+    const time = document.getElementById('schedulerTime');
+
+    dot.className = 'scheduler-dot ' + (data.state || 'offline');
+
+    const labels = {
+      idle: 'Aguardando proximo horario',
+      cortando: data.detail || 'Cortando...',
+      publicando: data.detail || 'Publicando...',
+      erro: data.detail || 'Erro',
+      offline: 'Scheduler nao iniciado'
+    };
+    detail.textContent = labels[data.state] || data.detail || data.state;
+    time.textContent = data.updated_at || '';
+  } catch (e) {
+    document.getElementById('schedulerDot').className = 'scheduler-dot offline';
+    document.getElementById('schedulerDetail').textContent = 'Sem conexao';
+  }
 }
+
+async function loadAll() {
+  await Promise.all([loadStats(), loadLives(), loadPublicados(), loadConfig(), loadSchedulerStatus()]);
+}
+
+// Atualiza status do scheduler a cada 10s
+setInterval(loadSchedulerStatus, 10000);
 
 // --- Privacy cycle & Delete ---
 const privacyOrder = ['unlisted', 'public', 'private'];

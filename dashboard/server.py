@@ -169,6 +169,8 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             self.handle_api_config()
         elif path == '/api/stats':
             self.handle_api_stats()
+        elif path == '/api/scheduler/status':
+            self.handle_scheduler_status()
         elif path == '/api/transcript':
             video_id = qs.get('id', [None])[0]
             self.handle_api_transcript(video_id)
@@ -205,6 +207,15 @@ class DashboardHandler(SimpleHTTPRequestHandler):
         self.send_header('Access-Control-Allow-Origin', '*')
         self.end_headers()
         self.wfile.write(json.dumps(data, ensure_ascii=False).encode())
+
+    def handle_scheduler_status(self):
+        status_file = os.path.join(os.path.dirname(__file__), 'scheduler_status.json')
+        if os.path.exists(status_file):
+            with open(status_file) as f:
+                data = json.load(f)
+            self.send_json(200, data)
+        else:
+            self.send_json(200, {'state': 'offline', 'detail': 'Scheduler nao iniciado', 'updated_at': ''})
 
     def handle_api_lives(self):
         result = sheets_get('LIVES!A1:L1000')

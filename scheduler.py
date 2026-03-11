@@ -21,6 +21,7 @@ ENV_FILE = os.path.join(CONFIG_DIR, '.env')
 SPREADSHEET_ID = os.environ.get('SPREADSHEET_ID', '1KG6sp77DeelQ6RTqzMZN2INXHJWxuUFtOUI3dOf7Ivs')
 SCRIPTS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'scripts')
 LIVES_DIR = os.environ.get('LIVES_DIR', os.path.expanduser('~/projetos/gws/lives'))
+STATUS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'dashboard', 'scheduler_status.json')
 
 # Load env
 if os.path.exists(ENV_FILE):
@@ -35,6 +36,21 @@ if os.path.exists(ENV_FILE):
 def log(msg):
     ts = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     print(f'[{ts}] {msg}', flush=True)
+
+
+def update_status(state, detail='', video_id=''):
+    """Escreve status atual do scheduler em JSON para o dashboard ler."""
+    data = {
+        'state': state,        # idle | cortando | publicando | erro
+        'detail': detail,
+        'video_id': video_id,
+        'updated_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    }
+    try:
+        with open(STATUS_FILE, 'w') as f:
+            json.dump(data, f, ensure_ascii=False)
+    except Exception:
+        pass
 
 
 def get_access_token():
@@ -129,6 +145,7 @@ def is_hour_now(horarios_str):
 def run_corte(video_id):
     """Executa yt-clip para uma live."""
     log(f'  Executando corte: {video_id}')
+    update_status('cortando', f'Cortando live {video_id}', video_id)
     script = os.path.join(SCRIPTS_DIR, 'yt-clip')
     env = os.environ.copy()
     env['LIVES_DIR'] = LIVES_DIR
@@ -142,15 +159,18 @@ def run_corte(video_id):
 
     if result.returncode == 0:
         log(f'  Corte concluido: {video_id}')
+        update_status('idle', f'Corte concluido: {video_id}', video_id)
         return True
     else:
         log(f'  Erro no corte: {result.stderr[-500:] if result.stderr else "sem output"}')
+        update_status('erro', f'Erro no corte: {video_id}', video_id)
         return False
 
 
 def run_publicacao(video_id, clip_file, title, description, tags, privacy):
     """Executa yt-publish para um clip."""
     log(f'  Publicando: {title[:60]}')
+    update_status('publicando', f'Publicando: {title[:50]}', video_id)
     script = os.path.join(SCRIPTS_DIR, 'yt-publish')
     env = os.environ.copy()
     env['PATH'] = f"/usr/bin:{os.path.expanduser('~/.local/bin')}:{SCRIPTS_DIR}:{env.get('PATH', '')}"
@@ -238,6 +258,7 @@ def process_cortes(config):
 def process_publicacao(config):
     """Publica clips cortados que ainda nao foram publicados."""
     privacy = config.get('privacy_padrao', 'unlisted')
+    max_por_vez = int(config.get('pub_max_por_vez', '2') or '2')
     lives, all_rows = get_pending_lives()
     headers = all_rows[0] if all_rows else []
 
@@ -276,6 +297,10 @@ def process_publicacao(config):
 
         count = 0
         for clip in clips:
+            if count >= max_por_vez:
+                log(f'  Limite de {max_por_vez} clips por vez atingido')
+                break
+
             if clip['title'] in published_titles:
                 continue
 
@@ -337,8 +362,10 @@ def main():
     log(f'  Scripts: {SCRIPTS_DIR}')
     log(f'  Lives: {LIVES_DIR}')
     log(f'  Config: {CONFIG_DIR}')
+    update_status('idle', 'Scheduler iniciado')
 
     # Roda cortes uma vez ao iniciar
+    current_hour = datetime.now().strftime('%H')
     try:
         config = load_config()
         cortes_paused = config.get('pipeline_cortes_paused', 'false') == 'true'
@@ -350,7 +377,8 @@ def main():
     except Exception as e:
         log(f'ERRO no corte inicial: {e}')
 
-    executed_this_hour = {'cortes': None, 'pub': None}
+    # Marca hora atual como ja executada para nao repetir no loop
+    executed_this_hour = {'cortes': current_hour, 'pub': None}
 
     while True:
         try:

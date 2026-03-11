@@ -196,8 +196,8 @@ $PROMPT_TEMPLATE
 $(cat "$JOB_DIR/condensed.txt")
 PROMPTEOF
 
-  # Chama claude CLI e salva resposta
-  claude -p "$(cat "$JOB_DIR/prompt.txt")" --output-format text > "$JOB_DIR/claude_response.txt" 2>/dev/null
+  # Chama claude CLI e salva resposta (unset CLAUDECODE para permitir execucao em subprocess)
+  env -u CLAUDECODE claude -p "$(cat "$JOB_DIR/prompt.txt")" --output-format text > "$JOB_DIR/claude_response.txt" 2>/dev/null
 
   # Extrai JSON da resposta
   python3 << PYEOF
