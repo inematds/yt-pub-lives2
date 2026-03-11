@@ -194,6 +194,8 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             self.handle_clip_privacy(data)
         elif post_path == '/api/clip/delete':
             self.handle_clip_delete(data)
+        elif post_path == '/api/pipeline/toggle':
+            self.handle_pipeline_toggle(data)
         else:
             self.send_json(404, {'error': 'not found'})
 
@@ -511,6 +513,33 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                 sheets_update(f'PUBLICADOS!A1:J{len(new_rows)}', new_rows)
 
         self.send_json(200, {'ok': True, 'deleted': clip_id})
+
+    def handle_pipeline_toggle(self, data):
+        """Toggle pipeline pause flags in CONFIG sheet."""
+        target = data.get('target', 'cortes')  # cortes | pub
+        key = 'pipeline_cortes_paused' if target == 'cortes' else 'pipeline_pub_paused'
+
+        # Read current config
+        result = sheets_get('CONFIG!A1:B20')
+        rows = result.get('values', [])
+
+        current = 'false'
+        found_idx = -1
+        for i, row in enumerate(rows):
+            if len(row) >= 1 and row[0] == key:
+                current = row[1] if len(row) >= 2 else 'false'
+                found_idx = i
+                break
+
+        new_val = 'false' if current == 'true' else 'true'
+
+        if found_idx >= 0:
+            rows[found_idx] = [key, new_val]
+            sheets_update('CONFIG!A1:B' + str(len(rows)), rows)
+        else:
+            sheets_append('CONFIG!A1', [[key, new_val]])
+
+        self.send_json(200, {'ok': True, 'target': target, 'paused': new_val == 'true'})
 
 
 def parse_duration_minutes(iso_duration):

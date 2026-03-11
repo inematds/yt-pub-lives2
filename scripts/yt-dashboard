@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+# yt-dashboard — Dashboard web para pipeline de Lives & Clips
+# Uso: yt-dashboard [porta]
+
+PORT="${1:-8090}"
+
+export PATH="/usr/bin:$HOME/.npm-global/bin:$HOME/google-cloud-sdk/bin:$HOME/.local/bin:$PATH"
+
+DASHBOARD_DIR="$HOME/projetos/gws/dashboard"
+
+if [[ ! -f "$DASHBOARD_DIR/server.py" ]]; then
+  echo "Erro: dashboard não encontrado em $DASHBOARD_DIR" >&2
+  exit 1
+fi
+
+echo "==> Dashboard: http://localhost:$PORT"
+cd "$DASHBOARD_DIR" && python3 server.py "$PORT"

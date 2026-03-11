@@ -1,0 +1,234 @@
+#!/usr/bin/env bash
+# yt-publish — Upload de vídeos para o YouTube via API
+# Usa as credenciais do gws CLI
+#
+# Uso:
+#   yt-publish <arquivo_ou_drive_id> --title "Título" --description "Descrição" [opções]
+#
+# Exemplos:
+#   yt-publish ~/videos/aula.mp4 --title "Aula 1" --description "Primeira aula"
+#   yt-publish --drive "1abc123fileId" --title "Aula 2" --description "Do Drive"
+#   yt-publish video.mp4 --title "Teste" --description "Desc" --privacy unlisted --tags "tag1,tag2"
+#   yt-publish video.mp4 --title "Teste" --description "Desc" --category 27 --language pt
+
+set -euo pipefail
+
+# --- Config (lê do .env) ---
+ENV_FILE="${HOME}/.config/gws/.env"
+if [[ -f "$ENV_FILE" ]]; then
+  set -a; source "$ENV_FILE"; set +a
+fi
+GWS_CONFIG_DIR="${GOOGLE_WORKSPACE_CLI_CONFIG_DIR:-$HOME/.config/gws}"
+CLIENT_ID="${CLIENT_ID:?Erro: CLIENT_ID não definido. Verifique $ENV_FILE}"
+CLIENT_SECRET="${CLIENT_SECRET:?Erro: CLIENT_SECRET não definido. Verifique $ENV_FILE}"
+API_KEY="${API_KEY:?Erro: API_KEY não definido. Verifique $ENV_FILE}"
+GWS_BIN="${HOME}/.npm-global/bin/gws"
+
+# --- Defaults ---
+PRIVACY="public"
+TAGS=""
+CATEGORY="22"  # People & Blogs
+LANGUAGE="pt"
+DRIVE_ID=""
+FILE_PATH=""
+TITLE=""
+DESCRIPTION=""
+
+# --- Parse args ---
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --drive)      DRIVE_ID="$2"; shift 2 ;;
+    --title)      TITLE="$2"; shift 2 ;;
+    --description) DESCRIPTION="$2"; shift 2 ;;
+    --privacy)    PRIVACY="$2"; shift 2 ;;
+    --tags)       TAGS="$2"; shift 2 ;;
+    --category)   CATEGORY="$2"; shift 2 ;;
+    --language)   LANGUAGE="$2"; shift 2 ;;
+    --help|-h)
+      head -14 "$0" | tail -12
+      echo ""
+      echo "Opções:"
+      echo "  --title       Título do vídeo (obrigatório)"
+      echo "  --description Descrição do vídeo (obrigatório)"
+      echo "  --drive       ID do arquivo no Google Drive (ao invés de arquivo local)"
+      echo "  --privacy     public|unlisted|private (padrão: public)"
+      echo "  --tags        Tags separadas por vírgula"
+      echo "  --category    ID da categoria YouTube (padrão: 22 = People & Blogs)"
+      echo "  --language    Idioma do vídeo (padrão: pt)"
+      echo ""
+      echo "Categorias comuns: 1=Film, 2=Autos, 10=Music, 15=Pets, 17=Sports,"
+      echo "  20=Gaming, 22=People&Blogs, 24=Entertainment, 25=News, 26=Howto, 27=Education, 28=Science"
+      exit 0
+      ;;
+    -*)
+      echo "Erro: opção desconhecida: $1" >&2
+      exit 1
+      ;;
+    *)
+      FILE_PATH="$1"; shift ;;
+  esac
+done
+
+# --- Validação ---
+if [[ -z "$TITLE" ]]; then
+  echo "Erro: --title é obrigatório" >&2
+  exit 1
+fi
+
+if [[ -z "$DESCRIPTION" ]]; then
+  echo "Erro: --description é obrigatório" >&2
+  exit 1
+fi
+
+if [[ -z "$FILE_PATH" && -z "$DRIVE_ID" ]]; then
+  echo "Erro: forneça um arquivo local ou --drive <fileId>" >&2
+  exit 1
+fi
+
+# --- Funções ---
+get_access_token() {
+  python3 << 'PYEOF'
+import json, base64, urllib.request, urllib.parse
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+import os
+
+config_dir = os.environ.get('GWS_CONFIG_DIR', os.path.expanduser('~/.config/gws'))
+
+with open(os.path.join(config_dir, '.encryption_key'), 'r') as f:
+    key = base64.b64decode(f.read().strip())
+
+with open(os.path.join(config_dir, 'credentials.enc'), 'rb') as f:
+    data = f.read()
+
+aesgcm = AESGCM(key)
+creds = json.loads(aesgcm.decrypt(data[:12], data[12:], None))
+
+token_data = urllib.parse.urlencode({
+    'client_id': os.environ['CLIENT_ID'],
+    'client_secret': os.environ['CLIENT_SECRET'],
+    'refresh_token': creds['refresh_token'],
+    'grant_type': 'refresh_token'
+}).encode()
+
+req = urllib.request.Request('https://oauth2.googleapis.com/token', data=token_data)
+resp = json.loads(urllib.request.urlopen(req).read())
+print(resp['access_token'])
+PYEOF
+}
+
+echo "==> Obtendo token de acesso..."
+export CLIENT_ID CLIENT_SECRET GWS_CONFIG_DIR
+ACCESS_TOKEN=$(get_access_token)
+
+if [[ -z "$ACCESS_TOKEN" || "$ACCESS_TOKEN" == "ERROR"* ]]; then
+  echo "Erro: não foi possível obter access token" >&2
+  exit 1
+fi
+echo "    Token OK"
+
+# --- Download do Drive se necessário ---
+if [[ -n "$DRIVE_ID" ]]; then
+  echo "==> Baixando arquivo do Google Drive (ID: $DRIVE_ID)..."
+  TMPFILE=$(mktemp /tmp/yt-upload-XXXXXX.mp4)
+
+  export PATH="$HOME/.npm-global/bin:$HOME/google-cloud-sdk/bin:$PATH"
+  $GWS_BIN drive files get --params "{\"fileId\": \"$DRIVE_ID\", \"alt\": \"media\"}" --output "$TMPFILE" 2>/dev/null
+
+  if [[ ! -s "$TMPFILE" ]]; then
+    echo "Erro: falha ao baixar arquivo do Drive" >&2
+    rm -f "$TMPFILE"
+    exit 1
+  fi
+
+  FILE_PATH="$TMPFILE"
+  FILE_SIZE=$(stat -c%s "$FILE_PATH")
+  echo "    Baixado: $FILE_PATH ($FILE_SIZE bytes)"
+fi
+
+# --- Verifica arquivo ---
+if [[ ! -f "$FILE_PATH" ]]; then
+  echo "Erro: arquivo não encontrado: $FILE_PATH" >&2
+  exit 1
+fi
+
+FILE_SIZE=$(stat -c%s "$FILE_PATH")
+echo "==> Arquivo: $FILE_PATH ($FILE_SIZE bytes)"
+
+# --- Monta metadata ---
+TAGS_JSON="[]"
+if [[ -n "$TAGS" ]]; then
+  TAGS_JSON=$(python3 -c "import json; print(json.dumps('$TAGS'.split(',')))")
+fi
+
+METADATA=$(python3 -c "
+import json
+meta = {
+    'snippet': {
+        'title': '''$TITLE''',
+        'description': '''$DESCRIPTION''',
+        'tags': $TAGS_JSON,
+        'categoryId': '$CATEGORY',
+        'defaultLanguage': '$LANGUAGE',
+        'defaultAudioLanguage': '$LANGUAGE'
+    },
+    'status': {
+        'privacyStatus': '$PRIVACY',
+        'selfDeclaredMadeForKids': False
+    }
+}
+print(json.dumps(meta))
+")
+
+echo "==> Iniciando upload para YouTube..."
+echo "    Título: $TITLE"
+echo "    Privacidade: $PRIVACY"
+echo "    Categoria: $CATEGORY"
+
+# --- Upload resumable ---
+# Step 1: Initiate upload
+UPLOAD_URL=$(curl -s -X POST \
+  -H "Authorization: Bearer $ACCESS_TOKEN" \
+  -H "Content-Type: application/json; charset=UTF-8" \
+  -H "X-Upload-Content-Length: $FILE_SIZE" \
+  -H "X-Upload-Content-Type: video/*" \
+  -D - \
+  -d "$METADATA" \
+  "https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status&key=$API_KEY" \
+  2>/dev/null | grep -i "^location:" | tr -d '\r' | sed 's/location: //i')
+
+if [[ -z "$UPLOAD_URL" ]]; then
+  echo "Erro: falha ao iniciar upload resumable" >&2
+  exit 1
+fi
+
+echo "    Upload URL obtida"
+
+# Step 2: Upload file
+echo "    Enviando arquivo..."
+RESPONSE=$(curl -s -X PUT \
+  -H "Authorization: Bearer $ACCESS_TOKEN" \
+  -H "Content-Type: video/*" \
+  -H "Content-Length: $FILE_SIZE" \
+  --data-binary "@$FILE_PATH" \
+  "$UPLOAD_URL")
+
+# --- Parse response ---
+VIDEO_ID=$(echo "$RESPONSE" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('id',''))" 2>/dev/null || true)
+
+if [[ -n "$VIDEO_ID" ]]; then
+  echo ""
+  echo "==> Upload concluído!"
+  echo "    Video ID: $VIDEO_ID"
+  echo "    URL: https://www.youtube.com/watch?v=$VIDEO_ID"
+  echo "    Studio: https://studio.youtube.com/video/$VIDEO_ID/edit"
+else
+  echo ""
+  echo "Erro no upload. Resposta da API:" >&2
+  echo "$RESPONSE" | python3 -m json.tool 2>/dev/null || echo "$RESPONSE"
+  exit 1
+fi
+
+# Cleanup temp file from Drive
+if [[ -n "$DRIVE_ID" && -f "$TMPFILE" ]]; then
+  rm -f "$TMPFILE"
+fi

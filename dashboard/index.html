@@ -66,6 +66,10 @@
     border: 1px solid var(--border);
   }
   button.secondary:hover { background: var(--border); }
+  button.danger {
+    background: var(--red);
+  }
+  button.danger:hover { background: #dc2626; }
   button.small {
     padding: 4px 10px;
     font-size: 0.75rem;
@@ -547,6 +551,8 @@
   <header>
     <h1><span>GWS</span> Lives & Clips</h1>
     <div class="header-actions">
+      <button id="btnCortes" onclick="togglePipeline('cortes')" class="danger small">Parar Cortes</button>
+      <button id="btnPub" onclick="togglePipeline('pub')" class="danger small">Parar Publicacao</button>
       <button class="secondary" onclick="toggleConfig()">Configuracoes</button>
       <button onclick="syncLives()" id="btnSync">Sincronizar Lives</button>
     </div>
@@ -1104,6 +1110,11 @@ async function loadConfig() {
   if (c.corte_max_por_dia) document.getElementById('cfgCorteMax').value = c.corte_max_por_dia;
   hourState.corte = stringToHours(c.corte_horarios || '06:00,18:00');
   buildHourPicker('corte');
+
+  // Pipeline state
+  cortesPaused = c.pipeline_cortes_paused === 'true';
+  pubPaused = c.pipeline_pub_paused === 'true';
+  updatePipelineBtns();
 }
 
 async function saveConfig() {
@@ -1164,6 +1175,51 @@ async function syncLives() {
     btn.disabled = false;
     btn.textContent = 'Sincronizar Lives';
   }
+}
+
+let cortesPaused = false;
+let pubPaused = false;
+
+function updatePipelineBtns() {
+  const btnC = document.getElementById('btnCortes');
+  const btnP = document.getElementById('btnPub');
+  if (cortesPaused) {
+    btnC.textContent = 'Retomar Cortes';
+    btnC.className = 'small';
+  } else {
+    btnC.textContent = 'Parar Cortes';
+    btnC.className = 'danger small';
+  }
+  if (pubPaused) {
+    btnP.textContent = 'Retomar Publicacao';
+    btnP.className = 'small';
+  } else {
+    btnP.textContent = 'Parar Publicacao';
+    btnP.className = 'danger small';
+  }
+}
+
+async function togglePipeline(target) {
+  const btn = target === 'cortes' ? document.getElementById('btnCortes') : document.getElementById('btnPub');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span>...';
+
+  try {
+    const resp = await fetchJson('/api/pipeline/toggle', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({target})
+    });
+
+    if (target === 'cortes') cortesPaused = resp.paused;
+    else pubPaused = resp.paused;
+    updatePipelineBtns();
+    const label = target === 'cortes' ? 'Cortes' : 'Publicacao';
+    showToast(resp.paused ? `${label} pausado` : `${label} retomado`);
+  } catch (e) {
+    showToast('Erro: ' + e.message, 'error');
+  }
+  btn.disabled = false;
 }
 
 async function loadAll() {

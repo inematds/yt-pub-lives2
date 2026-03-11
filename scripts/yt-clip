@@ -1,0 +1,406 @@
+#!/usr/bin/env bash
+# yt-clip — Corta lives do YouTube por tópicos e publica os clips
+# Pipeline: YouTube API (transcrição) → Claude (análise) → FFmpeg (corte) → yt-publish
+#
+# Uso:
+#   yt-clip <video_id> [opções]
+#
+# Exemplos:
+#   yt-clip 5gnTiNoYUcQ                              # Gera prompt manual + corta
+#   yt-clip 5gnTiNoYUcQ --ai claude-api              # Usa Claude API automático
+#   yt-clip 5gnTiNoYUcQ --dry-run                    # Só mostra tópicos sem cortar
+#   yt-clip 5gnTiNoYUcQ --publish                    # Corta e publica no YouTube
+#   yt-clip 5gnTiNoYUcQ --publish --privacy unlisted
+
+set -euo pipefail
+
+export PATH="/usr/bin:$HOME/.npm-global/bin:$HOME/google-cloud-sdk/bin:$HOME/.local/bin:$PATH"
+
+# --- Config ---
+ENV_FILE="${HOME}/.config/gws/.env"
+if [[ -f "$ENV_FILE" ]]; then
+  set -a; source "$ENV_FILE"; set +a
+fi
+
+WORK_DIR="${HOME}/projetos/gws/lives"
+PRIVACY="unlisted"
+DRY_RUN=false
+PUBLISH=false
+VIDEO_ID=""
+AI_MODE="manual"   # manual | claude-api
+MIN_DURATION=120    # Mínimo 2 min por clip
+MAX_DURATION=900    # Máximo 15 min por clip
+
+# --- Parse args ---
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --dry-run)    DRY_RUN=true; shift ;;
+    --publish)    PUBLISH=true; shift ;;
+    --privacy)    PRIVACY="$2"; shift 2 ;;
+    --ai)         AI_MODE="$2"; shift 2 ;;
+    --work-dir)   WORK_DIR="$2"; shift 2 ;;
+    --min-dur)    MIN_DURATION="$2"; shift 2 ;;
+    --max-dur)    MAX_DURATION="$2"; shift 2 ;;
+    --help|-h)
+      head -12 "$0" | tail -10
+      echo ""
+      echo "Opções:"
+      echo "  --dry-run     Só analisa, não corta nem publica"
+      echo "  --publish     Corta E publica no YouTube"
+      echo "  --privacy     public|unlisted|private (padrão: unlisted)"
+      echo "  --ai          manual|claude-api (padrão: manual)"
+      echo "                manual: gera prompt para colar no Claude (sessão interativa)"
+      echo "                claude-api: usa ANTHROPIC_API_KEY automaticamente"
+      echo "  --work-dir    Diretório de trabalho (padrão: ~/projetos/gws/lives)"
+      echo "  --min-dur     Duração mínima de clip em segundos (padrão: 120)"
+      echo "  --max-dur     Duração máxima de clip em segundos (padrão: 900)"
+      exit 0
+      ;;
+    -*)
+      echo "Erro: opção desconhecida: $1" >&2
+      exit 1
+      ;;
+    *)
+      VIDEO_ID="$1"; shift ;;
+  esac
+done
+
+if [[ -z "$VIDEO_ID" ]]; then
+  echo "Erro: forneça o video_id" >&2
+  exit 1
+fi
+
+JOB_DIR="$WORK_DIR/$VIDEO_ID"
+mkdir -p "$JOB_DIR"
+
+# ============================================================
+# ETAPA 1: Baixar transcrição do YouTube
+# ============================================================
+echo "==> [1/5] Baixando transcrição do YouTube..."
+
+if [[ -f "$JOB_DIR/transcript_raw.json3" ]]; then
+  echo "    Transcrição já existe, pulando download"
+else
+  yt-dlp --write-auto-sub --sub-lang pt --skip-download --sub-format json3 \
+    -o "$JOB_DIR/%(id)s" "https://www.youtube.com/watch?v=$VIDEO_ID" 2>/dev/null
+
+  # Rename to standard name
+  mv "$JOB_DIR/${VIDEO_ID}.pt.json3" "$JOB_DIR/transcript_raw.json3" 2>/dev/null || true
+fi
+
+if [[ ! -f "$JOB_DIR/transcript_raw.json3" ]]; then
+  echo "Erro: não foi possível baixar a transcrição" >&2
+  exit 1
+fi
+
+# ============================================================
+# ETAPA 2: Processar transcrição em blocos de ~30s
+# ============================================================
+echo "==> [2/5] Processando transcrição..."
+
+python3 << PYEOF
+import json
+
+with open('$JOB_DIR/transcript_raw.json3') as f:
+    data = json.load(f)
+
+events = data.get('events', [])
+segments = []
+for e in events:
+    if 'segs' in e:
+        text = ''.join(s.get('utf8', '') for s in e['segs']).strip()
+        if text and text != '\n':
+            start_ms = e.get('tStartMs', 0)
+            dur_ms = e.get('dDurationMs', 0)
+            segments.append({
+                'start_ms': start_ms,
+                'end_ms': start_ms + dur_ms,
+                'text': text.replace('\n', ' ')
+            })
+
+# Consolidate into ~30s blocks
+blocks = []
+if segments:
+    current = {'start_ms': segments[0]['start_ms'], 'text': ''}
+    for s in segments:
+        current['text'] += ' ' + s['text']
+        current['end_ms'] = s['end_ms']
+        if s['end_ms'] - current['start_ms'] > 30000:
+            blocks.append(current)
+            current = {'start_ms': s['end_ms'], 'text': ''}
+    if current['text'].strip():
+        blocks.append(current)
+
+# Save condensed transcript
+condensed = []
+for b in blocks:
+    start = f"{int(b['start_ms']/1000//60):02d}:{int(b['start_ms']/1000%60):02d}"
+    end = f"{int(b['end_ms']/1000//60):02d}:{int(b['end_ms']/1000%60):02d}"
+    condensed.append(f"[{start}-{end}] {b['text'].strip()}")
+
+with open('$JOB_DIR/condensed.txt', 'w') as f:
+    f.write('\n'.join(condensed))
+
+duration_min = blocks[-1]['end_ms'] / 1000 / 60 if blocks else 0
+print(f"    {len(segments)} segmentos → {len(blocks)} blocos ({duration_min:.0f} min)")
+PYEOF
+
+# ============================================================
+# ETAPA 3: Análise de tópicos
+# ============================================================
+echo "==> [3/5] Analisando tópicos (modo: $AI_MODE)..."
+
+PROMPT_TEMPLATE="Analise esta transcrição de uma live do YouTube e identifique os TÓPICOS PRINCIPAIS.
+
+Para cada tópico, retorne:
+- start: timestamp de início (MM:SS)
+- end: timestamp de fim (MM:SS)
+- title: título curto e atrativo para YouTube (max 70 chars)
+- description: descrição de 2-3 frases para o YouTube
+- tags: lista de 3-5 tags relevantes
+
+Regras:
+- Cada clip deve ter entre $MIN_DURATION e $MAX_DURATION segundos
+- Ignore trechos de abertura/saudação e encerramento genérico
+- Foque em conteúdo educacional, dicas práticas e demonstrações
+- Títulos devem ser atrativos e usar palavras-chave de busca
+- Os clips NÃO devem se sobrepor
+
+Retorne APENAS um JSON válido com esta estrutura:
+{
+  \"video_title\": \"título original resumido\",
+  \"topics\": [
+    {
+      \"start\": \"MM:SS\",
+      \"end\": \"MM:SS\",
+      \"title\": \"...\",
+      \"description\": \"...\",
+      \"tags\": [\"tag1\", \"tag2\", \"tag3\"]
+    }
+  ]
+}
+
+TRANSCRIÇÃO:"
+
+if [[ -f "$JOB_DIR/topics.json" ]]; then
+  echo "    Análise já existe, pulando"
+
+elif [[ "$AI_MODE" == "claude-api" ]]; then
+  # --- Modo: Claude API (automático) ---
+  echo "    Usando Anthropic API..."
+
+  python3 << PYEOF
+import json, os, re
+
+try:
+    import anthropic
+except ImportError:
+    import subprocess, sys
+    subprocess.check_call([sys.executable, '-m', 'pip', 'install', '--user', '--break-system-packages', 'anthropic', '-q'])
+    import anthropic
+
+client = anthropic.Anthropic()
+transcript = open('$JOB_DIR/condensed.txt').read()
+
+prompt = """$PROMPT_TEMPLATE
+
+""" + transcript
+
+message = client.messages.create(
+    model="claude-sonnet-4-20250514",
+    max_tokens=4096,
+    messages=[{"role": "user", "content": prompt}]
+)
+
+response_text = message.content[0].text
+
+json_match = re.search(r'\{[\s\S]*\}', response_text)
+if json_match:
+    topics_data = json.loads(json_match.group())
+    with open('$JOB_DIR/topics.json', 'w') as f:
+        json.dump(topics_data, f, ensure_ascii=False, indent=2)
+    print(f"    Encontrados {len(topics_data.get('topics',[]))} tópicos")
+else:
+    print("Erro: Claude não retornou JSON válido")
+    print(response_text[:500])
+    exit(1)
+PYEOF
+
+elif [[ "$AI_MODE" == "manual" ]]; then
+  # --- Modo: Manual (gera prompt para sessão interativa) ---
+  # Salva o prompt completo para ser usado pelo Claude Code ou colado manualmente
+  cat > "$JOB_DIR/prompt.txt" << PROMPTEOF
+$PROMPT_TEMPLATE
+
+$(cat "$JOB_DIR/condensed.txt")
+PROMPTEOF
+
+  echo ""
+  echo "    Prompt salvo em: $JOB_DIR/prompt.txt"
+  echo ""
+  echo "    Para continuar, crie o arquivo topics.json com a análise."
+  echo "    Opções:"
+  echo "      1. Cole o conteúdo de prompt.txt no Claude e salve a resposta em topics.json"
+  echo "      2. Use o Claude Code: leia prompt.txt, analise e escreva topics.json"
+  echo "      3. Rode novamente com --ai claude-api (requer ANTHROPIC_API_KEY)"
+  echo ""
+  echo "    Depois rode novamente: yt-clip $VIDEO_ID"
+  exit 0
+fi
+
+# Show topics
+echo ""
+python3 << PYEOF
+import json
+with open('$JOB_DIR/topics.json') as f:
+    data = json.load(f)
+
+print(f"    Video: {data.get('video_title','')}")
+print(f"    Tópicos: {len(data.get('topics',[]))}")
+print("")
+for i, t in enumerate(data.get('topics', []), 1):
+    print(f"    [{i}] {t['start']} → {t['end']}  {t['title']}")
+    print(f"        {t['description'][:100]}...")
+    print(f"        Tags: {', '.join(t.get('tags',[]))}")
+    print("")
+PYEOF
+
+if [[ "$DRY_RUN" == "true" ]]; then
+  echo "==> Dry run completo. Tópicos salvos em: $JOB_DIR/topics.json"
+  exit 0
+fi
+
+# ============================================================
+# ETAPA 4: Baixar vídeo e cortar com FFmpeg
+# ============================================================
+echo "==> [4/5] Baixando vídeo e cortando clips..."
+
+# Download video if not exists
+if [[ ! -f "$JOB_DIR/source.mp4" ]]; then
+  echo "    Baixando vídeo..."
+  yt-dlp -f "bestvideo[height<=1080]+bestaudio/best[height<=1080]" \
+    --merge-output-format mp4 \
+    -o "$JOB_DIR/source.mp4" \
+    "https://www.youtube.com/watch?v=$VIDEO_ID" 2>/dev/null
+  echo "    Download completo"
+fi
+
+# Cut clips
+python3 << PYEOF
+import json, subprocess, os
+
+with open('$JOB_DIR/topics.json') as f:
+    data = json.load(f)
+
+clips_dir = '$JOB_DIR/clips'
+os.makedirs(clips_dir, exist_ok=True)
+
+results = []
+
+for i, t in enumerate(data.get('topics', []), 1):
+    start = t['start']
+    end = t['end']
+
+    # Convert MM:SS to seconds
+    sp = start.split(':')
+    start_sec = int(sp[0]) * 60 + int(sp[1])
+    ep = end.split(':')
+    end_sec = int(ep[0]) * 60 + int(ep[1])
+    duration = end_sec - start_sec
+
+    safe_title = ''.join(c if c.isalnum() or c in ' -_' else '' for c in t['title'])[:50].strip()
+    filename = f"clip_{i:02d}_{safe_title}.mp4"
+    filepath = os.path.join(clips_dir, filename)
+
+    if os.path.exists(filepath):
+        print(f"    Clip {i} já existe, pulando")
+    else:
+        print(f"    Cortando clip {i}: {start} → {end} ({duration}s) - {t['title'][:50]}")
+        cmd = [
+            'ffmpeg', '-y',
+            '-ss', str(start_sec),
+            '-i', '$JOB_DIR/source.mp4',
+            '-t', str(duration),
+            '-c', 'copy',
+            '-avoid_negative_ts', 'make_zero',
+            filepath
+        ]
+        subprocess.run(cmd, capture_output=True)
+
+    results.append({
+        'index': i,
+        'file': filepath,
+        'filename': filename,
+        'title': t['title'],
+        'description': t['description'],
+        'tags': t.get('tags', []),
+        'duration': duration
+    })
+
+with open('$JOB_DIR/clips_manifest.json', 'w') as f:
+    json.dump(results, f, ensure_ascii=False, indent=2)
+
+print(f"\n    {len(results)} clips cortados em: {clips_dir}")
+PYEOF
+
+# ============================================================
+# ETAPA 5: Publicar no YouTube (se --publish)
+# ============================================================
+if [[ "$PUBLISH" == "true" ]]; then
+  echo "==> [5/5] Publicando clips no YouTube..."
+
+  python3 << PYEOF
+import json, subprocess
+
+with open('$JOB_DIR/clips_manifest.json') as f:
+    clips = json.load(f)
+
+published = []
+
+for clip in clips:
+    print(f"\n    Publicando: {clip['title']}")
+
+    tags = ','.join(clip.get('tags', []))
+
+    cmd = [
+        'yt-publish', clip['file'],
+        '--title', clip['title'],
+        '--description', clip['description'],
+        '--privacy', '$PRIVACY',
+        '--tags', tags,
+        '--category', '27'
+    ]
+
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    output = result.stdout + result.stderr
+
+    # Extract video ID from output
+    for line in output.split('\n'):
+        if 'Video ID:' in line:
+            vid = line.split('Video ID:')[1].strip()
+            published.append({
+                'title': clip['title'],
+                'video_id': vid,
+                'url': f'https://www.youtube.com/watch?v={vid}'
+            })
+            print(f"    ✓ Publicado: https://www.youtube.com/watch?v={vid}")
+            break
+    else:
+        print(f"    ✗ Erro: {output[:200]}")
+
+with open('$JOB_DIR/published.json', 'w') as f:
+    json.dump(published, f, ensure_ascii=False, indent=2)
+
+print(f"\n==> {len(published)} clips publicados!")
+PYEOF
+else
+  echo "==> [5/5] Publicação pulada (use --publish para publicar)"
+fi
+
+echo ""
+echo "==> Concluído! Arquivos em: $JOB_DIR"
+echo "    - topics.json: tópicos identificados"
+echo "    - clips/: vídeos cortados"
+if [[ "$PUBLISH" == "true" ]]; then
+  echo "    - published.json: links dos vídeos publicados"
+fi
