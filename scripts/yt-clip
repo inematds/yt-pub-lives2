@@ -186,33 +186,25 @@ if [[ -f "$JOB_DIR/topics.json" ]]; then
   echo "    Análise já existe, pulando"
 
 elif [[ "$AI_MODE" == "claude-api" ]]; then
-  # --- Modo: Claude API (automático) ---
-  echo "    Usando Anthropic API..."
+  # --- Modo: Claude Code CLI (usa autenticacao OAuth) ---
+  echo "    Usando Claude Code CLI..."
 
+  # Monta prompt completo em arquivo
+  cat > "$JOB_DIR/prompt.txt" << PROMPTEOF
+$PROMPT_TEMPLATE
+
+$(cat "$JOB_DIR/condensed.txt")
+PROMPTEOF
+
+  # Chama claude CLI e salva resposta
+  claude -p "$(cat "$JOB_DIR/prompt.txt")" --output-format text > "$JOB_DIR/claude_response.txt" 2>/dev/null
+
+  # Extrai JSON da resposta
   python3 << PYEOF
-import json, os, re
+import json, re
 
-try:
-    import anthropic
-except ImportError:
-    import subprocess, sys
-    subprocess.check_call([sys.executable, '-m', 'pip', 'install', '--user', '--break-system-packages', 'anthropic', '-q'])
-    import anthropic
-
-client = anthropic.Anthropic()
-transcript = open('$JOB_DIR/condensed.txt').read()
-
-prompt = """$PROMPT_TEMPLATE
-
-""" + transcript
-
-message = client.messages.create(
-    model="claude-sonnet-4-20250514",
-    max_tokens=4096,
-    messages=[{"role": "user", "content": prompt}]
-)
-
-response_text = message.content[0].text
+with open('$JOB_DIR/claude_response.txt') as f:
+    response_text = f.read()
 
 json_match = re.search(r'\{[\s\S]*\}', response_text)
 if json_match:
