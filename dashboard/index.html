@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>GWS - Lives & Clips Dashboard</title>
+<title>yt-pub-lives v2.0.0 - Lives & Clips Dashboard</title>
 <style>
   :root {
     --bg: #0f1117;
@@ -535,6 +535,33 @@
   .scheduler-detail { color: var(--muted); }
   .scheduler-time { color: var(--muted); font-size: 0.7rem; margin-left: auto; }
 
+  /* Pagination */
+  .pagination {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    padding: 10px 0;
+  }
+  .pagination button {
+    padding: 4px 10px;
+    font-size: 0.8rem;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--text);
+    cursor: pointer;
+  }
+  .pagination button.active {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+  }
+  .pagination button:disabled {
+    opacity: 0.4;
+    cursor: default;
+  }
+
   /* Toast */
   .toast {
     position: fixed;
@@ -578,7 +605,7 @@
 
 <div class="container">
   <header>
-    <h1><span>GWS</span> Lives & Clips</h1>
+    <h1><span>GWS</span> Lives & Clips <small style="font-size:0.5em;color:var(--muted)">- yt-pub-lives v2.0.0</small></h1>
     <div class="header-actions">
       <button id="btnCortes" onclick="togglePipeline('cortes')" class="danger small">Parar Cortes</button>
       <button id="btnPub" onclick="togglePipeline('pub')" class="danger small">Parar Publicacao</button>
@@ -714,6 +741,19 @@
       </div>
     </div>
 
+    <!-- Prompts -->
+    <div class="config-section">
+      <h3>Prompts</h3>
+      <div class="config-field">
+        <label>Prompt Analise de Cortes (Claude analisa a transcricao e identifica topicos)</label>
+        <textarea id="cfgPromptCortes" rows="12" style="width:100%;font-family:monospace;font-size:0.8rem;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:8px;resize:vertical"></textarea>
+      </div>
+      <div class="config-field" style="margin-top:12px">
+        <label>Prompt Thumbnail (LLM gera prompt estruturado para o gerador de imagem)</label>
+        <textarea id="cfgPromptThumb" rows="12" style="width:100%;font-family:monospace;font-size:0.8rem;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:8px;resize:vertical"></textarea>
+      </div>
+    </div>
+
     <div style="margin-top: 8px;">
       <button onclick="saveConfig()" id="btnSave">Salvar Configuracoes</button>
     </div>
@@ -728,9 +768,9 @@
   <!-- Lives Toolbar + Table -->
   <div id="tabLives">
     <div class="toolbar">
-      <input type="text" id="livesSearch" placeholder="Pesquisar por titulo..." oninput="filterLives()">
+      <input type="text" id="livesSearch" placeholder="Pesquisar por titulo..." oninput="livesPage=1;filterLives()">
       <span class="toolbar-label">Situacao:</span>
-      <select id="livesStatus" onchange="filterLives()">
+      <select id="livesStatus" onchange="livesPage=1;filterLives()">
         <option value="">Todas</option>
         <option value="pendente">Pendentes (sem corte)</option>
         <option value="concluido">Cortadas</option>
@@ -739,7 +779,7 @@
         <option value="erro">Com erro</option>
       </select>
       <span class="toolbar-label">Ordem:</span>
-      <select id="livesOrder" onchange="filterLives()">
+      <select id="livesOrder" onchange="livesPage=1;filterLives()">
         <option value="oldest">Mais antigas</option>
         <option value="newest">Mais recentes</option>
         <option value="title">Titulo A-Z</option>
@@ -766,29 +806,30 @@
           <tr><td colspan="8" class="empty">Carregando...</td></tr>
         </tbody>
       </table>
+      <div class="pagination" id="livesPagination"></div>
     </div>
   </div>
 
   <!-- Publicados Toolbar + Table -->
   <div id="tabPublicados" style="display:none">
     <div class="toolbar">
-      <input type="text" id="pubSearch" placeholder="Pesquisar por titulo ou tags..." oninput="filterPubs()">
+      <input type="text" id="pubSearch" placeholder="Pesquisar por titulo ou tags..." oninput="clipsPage=1;filterPubs()">
       <span class="toolbar-label">Status:</span>
-      <select id="pubStatus" onchange="filterPubs()">
+      <select id="pubStatus" onchange="clipsPage=1;filterPubs()">
         <option value="">Todos</option>
         <option value="publicado">Publicados</option>
         <option value="pendente">Pendentes</option>
         <option value="parado">Parados</option>
       </select>
       <span class="toolbar-label">Privacy:</span>
-      <select id="pubPrivacy" onchange="filterPubs()">
+      <select id="pubPrivacy" onchange="clipsPage=1;filterPubs()">
         <option value="">Todas</option>
         <option value="unlisted">Unlisted</option>
         <option value="public">Public</option>
         <option value="private">Private</option>
       </select>
       <span class="toolbar-label">Ordem:</span>
-      <select id="pubOrder" onchange="filterPubs()">
+      <select id="pubOrder" onchange="clipsPage=1;filterPubs()">
         <option value="newest">Mais recentes</option>
         <option value="oldest">Mais antigos</option>
         <option value="title">Titulo A-Z</option>
@@ -817,6 +858,7 @@
         <tr><td colspan="7" class="empty">Carregando...</td></tr>
       </tbody>
     </table>
+    <div class="pagination" id="clipsPagination"></div>
     </div>
   </div>
 </div>
@@ -851,9 +893,12 @@
 
 <script>
 const API = '';
+const PAGE_SIZE = 100;
 let allLives = [];
 let allPublicados = [];
 let currentPubFilter = null;
+let livesPage = 1;
+let clipsPage = 1;
 
 async function fetchJson(url, opts) {
   const resp = await fetch(API + url, opts);
@@ -1084,6 +1129,32 @@ async function toggleClipPaused(liveId, title) {
   }
 }
 
+function renderPagination(containerId, currentPage, totalPages, onPageChange) {
+  const container = document.getElementById(containerId);
+  if (totalPages <= 1) { container.innerHTML = ''; return; }
+
+  let html = `<button ${currentPage <= 1 ? 'disabled' : ''} onclick="void(0)">◀</button>`;
+  // Show max 7 page buttons
+  let startP = Math.max(1, currentPage - 3);
+  let endP = Math.min(totalPages, startP + 6);
+  if (endP - startP < 6) startP = Math.max(1, endP - 6);
+
+  for (let i = startP; i <= endP; i++) {
+    html += `<button class="${i === currentPage ? 'active' : ''}" data-page="${i}">${i}</button>`;
+  }
+  html += `<button ${currentPage >= totalPages ? 'disabled' : ''} data-page="next">▶</button>`;
+
+  container.innerHTML = html;
+  container.querySelectorAll('button').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const p = btn.dataset.page;
+      if (!p) { if (!btn.disabled) onPageChange(currentPage - 1); return; }
+      if (p === 'next') { onPageChange(currentPage + 1); return; }
+      onPageChange(parseInt(p));
+    });
+  });
+}
+
 function goToLive(videoId) {
   showTab('lives');
   document.getElementById('livesSearch').value = videoId;
@@ -1098,6 +1169,7 @@ function goToClips(videoId) {
 function filterByStatus(status) {
   showTab('lives');
   document.getElementById('livesStatus').value = status;
+  livesPage = 1;
   filterLives();
 }
 
@@ -1137,14 +1209,21 @@ function filterLives() {
     }
   });
 
-  document.getElementById('livesCount').textContent = filtered.length + ' / ' + allLives.length;
+  const totalFiltered = filtered.length;
+  const totalPages = Math.ceil(totalFiltered / PAGE_SIZE);
+  if (livesPage > totalPages) livesPage = totalPages || 1;
+  const start = (livesPage - 1) * PAGE_SIZE;
+  const paged = filtered.slice(start, start + PAGE_SIZE);
 
-  if (filtered.length === 0) {
+  document.getElementById('livesCount').textContent = totalFiltered + ' / ' + allLives.length;
+  renderPagination('livesPagination', livesPage, totalPages, p => { livesPage = p; filterLives(); });
+
+  if (paged.length === 0) {
     tbody.innerHTML = '<tr><td colspan="8" class="empty">Nenhuma live encontrada.</td></tr>';
     return;
   }
 
-  tbody.innerHTML = filtered.map(l => {
+  tbody.innerHTML = paged.map(l => {
     const transcBadge = badge(l.status_transcricao, {
       clickable: l.status_transcricao === 'concluido',
       onclick: `openTranscript('${l.video_id}','${escapeHtml(l.titulo).replace(/'/g,"\\'")}')`,
@@ -1259,14 +1338,21 @@ function filterPubs() {
   });
 
   const totalAll = allPublicados.length + allPendentes.length;
-  document.getElementById('pubCount').textContent = filtered.length + ' / ' + totalAll;
+  const totalFiltered = filtered.length;
+  const totalPages = Math.ceil(totalFiltered / PAGE_SIZE);
+  if (clipsPage > totalPages) clipsPage = totalPages || 1;
+  const start = (clipsPage - 1) * PAGE_SIZE;
+  const paged = filtered.slice(start, start + PAGE_SIZE);
 
-  if (filtered.length === 0) {
+  document.getElementById('pubCount').textContent = totalFiltered + ' / ' + totalAll;
+  renderPagination('clipsPagination', clipsPage, totalPages, p => { clipsPage = p; filterPubs(); });
+
+  if (paged.length === 0) {
     tbody.innerHTML = '<tr><td colspan="7" class="empty">Nenhum clip encontrado.</td></tr>';
     return;
   }
 
-  tbody.innerHTML = filtered.map(p => {
+  tbody.innerHTML = paged.map(p => {
     const fileLink = p.filename && p.live_video_id
       ? `<a href="/clips/${p.live_video_id}/${encodeURIComponent(p.filename)}" target="_blank" title="${p.filename}">▶</a>`
       : '-';
@@ -1328,6 +1414,14 @@ async function loadConfig() {
   cortesPaused = c.pipeline_cortes_paused === 'true';
   pubPaused = c.pipeline_pub_paused === 'true';
   updatePipelineBtns();
+
+  // Prompts
+  try {
+    const pData = await fetchJson('/api/prompts');
+    const p = pData.prompts || {};
+    document.getElementById('cfgPromptCortes').value = p.prompt_cortes || '';
+    document.getElementById('cfgPromptThumb').value = p.prompt_thumb || '';
+  } catch (e) {}
 }
 
 async function saveConfig() {
@@ -1352,6 +1446,16 @@ async function saveConfig() {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify(data)
+    });
+
+    // Save prompts
+    await fetchJson('/api/prompts', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        prompt_cortes: document.getElementById('cfgPromptCortes').value,
+        prompt_thumb: document.getElementById('cfgPromptThumb').value
+      })
     });
 
     btn.innerHTML = 'Salvo!';

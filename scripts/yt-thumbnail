@@ -38,7 +38,7 @@ WIDTH = 1280
 HEIGHT = 720
 FONT_PATH = '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf'
 
-SYSTEM_PROMPT = """Voce e especialista na criacao de prompts para geracao de thumbnails de YouTube para o canal INEMA TDS (canal de tecnologia, programacao, IA e automacao).
+DEFAULT_SYSTEM_PROMPT = """Voce e especialista na criacao de prompts para geracao de thumbnails de YouTube para o canal INEMA TDS (canal de tecnologia, programacao, IA e automacao).
 
 Sua missao e transformar qualquer titulo de video em um prompt detalhado, otimizado para alta taxa de cliques (CTR) e pronto para uso em geradores de imagem.
 
@@ -66,6 +66,18 @@ Retorne SOMENTE este JSON:
   "composicao": "(string; como os elementos estao dispostos, onde fica o espaco para texto)",
   "negative_prompt": "watermark, border, long text, deformed hands, extra fingers, cluttered, low quality, blurry text"
 }"""
+
+# Load custom prompt from config file if exists
+_prompt_file = os.path.join(CONFIG_DIR, 'prompt_thumb.txt')
+if os.path.exists(_prompt_file):
+    with open(_prompt_file) as _f:
+        _custom = _f.read().strip()
+        if _custom:
+            SYSTEM_PROMPT = _custom
+        else:
+            SYSTEM_PROMPT = DEFAULT_SYSTEM_PROMPT
+else:
+    SYSTEM_PROMPT = DEFAULT_SYSTEM_PROMPT
 
 
 def generate_prompt_json(title, description=''):

@@ -167,6 +167,8 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             self.handle_api_publicados(video_id)
         elif path == '/api/config':
             self.handle_api_config()
+        elif path == '/api/prompts':
+            self.handle_api_prompts_get()
         elif path == '/api/stats':
             self.handle_api_stats()
         elif path == '/api/scheduler/status':
@@ -204,6 +206,8 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             self.handle_live_reprocess(data)
         elif post_path == '/api/clip/pause':
             self.handle_clip_pause(data)
+        elif post_path == '/api/prompts':
+            self.handle_api_prompts_save(data)
         else:
             self.send_json(404, {'error': 'not found'})
 
@@ -406,6 +410,29 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             if len(row) >= 2:
                 config[row[0]] = row[1]
         self.send_json(200, {'config': config})
+
+    def handle_api_prompts_get(self):
+        config_dir = os.environ.get('GWS_CONFIG_DIR', os.path.expanduser('~/.config/gws'))
+        prompts = {}
+        for name in ('prompt_cortes', 'prompt_thumb'):
+            path = os.path.join(config_dir, f'{name}.txt')
+            if os.path.exists(path):
+                with open(path) as f:
+                    prompts[name] = f.read()
+            else:
+                prompts[name] = ''
+        self.send_json(200, {'prompts': prompts})
+
+    def handle_api_prompts_save(self, data):
+        config_dir = os.environ.get('GWS_CONFIG_DIR', os.path.expanduser('~/.config/gws'))
+        saved = []
+        for name in ('prompt_cortes', 'prompt_thumb'):
+            if name in data:
+                path = os.path.join(config_dir, f'{name}.txt')
+                with open(path, 'w') as f:
+                    f.write(data[name])
+                saved.append(name)
+        self.send_json(200, {'ok': True, 'saved': saved})
 
     def handle_api_stats(self):
         lives_result = sheets_get('LIVES!A1:L1000')

@@ -151,7 +151,11 @@ PYEOF
 # ============================================================
 echo "==> [3/5] Analisando tópicos (modo: $AI_MODE)..."
 
-PROMPT_TEMPLATE="Analise esta transcrição de uma live do YouTube e identifique os TÓPICOS PRINCIPAIS.
+PROMPT_CONFIG_FILE="${GWS_CONFIG_DIR:-${HOME}/.config/gws}/prompt_cortes.txt"
+if [[ -f "$PROMPT_CONFIG_FILE" ]] && [[ -s "$PROMPT_CONFIG_FILE" ]]; then
+  PROMPT_TEMPLATE="$(cat "$PROMPT_CONFIG_FILE")"
+else
+  PROMPT_TEMPLATE="Analise esta transcrição de uma live do YouTube e identifique os TÓPICOS PRINCIPAIS.
 
 Para cada tópico, retorne:
 - start: timestamp de início (MM:SS)
@@ -182,6 +186,7 @@ Retorne APENAS um JSON válido com esta estrutura:
 }
 
 TRANSCRIÇÃO:"
+fi
 
 if [[ -f "$JOB_DIR/topics.json" ]]; then
   echo "    Análise já existe, pulando"
