@@ -1,0 +1,1245 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GWS - Lives & Clips Dashboard</title>
+<style>
+  :root {
+    --bg: #0f1117;
+    --card: #1a1d27;
+    --border: #2a2d3a;
+    --text: #e4e4e7;
+    --muted: #71717a;
+    --accent: #6366f1;
+    --accent-hover: #818cf8;
+    --green: #22c55e;
+    --yellow: #eab308;
+    --red: #ef4444;
+    --blue: #3b82f6;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.6;
+  }
+
+  .container { max-width: 1200px; margin: 0 auto; padding: 20px; }
+
+  header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 24px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  header h1 { font-size: 1.5rem; font-weight: 600; }
+  header h1 span { color: var(--accent); }
+
+  .header-actions { display: flex; gap: 12px; }
+
+  button {
+    background: var(--accent);
+    color: white;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.875rem;
+    font-weight: 500;
+    transition: background 0.2s;
+  }
+  button:hover { background: var(--accent-hover); }
+  button:disabled { opacity: 0.5; cursor: not-allowed; }
+  button.saved {
+    background: var(--green);
+    pointer-events: none;
+  }
+  button.secondary {
+    background: var(--card);
+    border: 1px solid var(--border);
+  }
+  button.secondary:hover { background: var(--border); }
+  button.small {
+    padding: 4px 10px;
+    font-size: 0.75rem;
+  }
+
+  /* Stats Cards */
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 16px;
+    margin-bottom: 24px;
+  }
+
+  .stat-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 20px;
+  }
+
+  .stat-card .label {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    color: var(--muted);
+    letter-spacing: 0.05em;
+    margin-bottom: 4px;
+  }
+
+  .stat-card .value {
+    font-size: 2rem;
+    font-weight: 700;
+  }
+
+  .stat-card .value.green { color: var(--green); }
+  .stat-card .value.yellow { color: var(--yellow); }
+  .stat-card .value.blue { color: var(--blue); }
+
+  /* Tabs */
+  .tabs {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 16px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .tab {
+    padding: 8px 16px;
+    background: none;
+    border: none;
+    color: var(--muted);
+    cursor: pointer;
+    font-size: 0.875rem;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+  }
+  .tab.active {
+    color: var(--accent);
+    border-bottom-color: var(--accent);
+  }
+  .tab:hover { color: var(--text); }
+
+  /* Config Panel */
+  .config-panel {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 20px;
+    margin-bottom: 24px;
+    display: none;
+  }
+  .config-panel.visible { display: block; }
+
+  .config-section {
+    margin-bottom: 20px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid var(--border);
+  }
+  .config-section:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
+
+  .config-section h3 {
+    font-size: 0.9rem;
+    margin-bottom: 12px;
+    color: var(--accent);
+  }
+
+  .config-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 16px;
+  }
+
+  .config-field label {
+    display: block;
+    font-size: 0.75rem;
+    color: var(--muted);
+    margin-bottom: 4px;
+  }
+
+  .config-field input, .config-field select {
+    width: 100%;
+    padding: 8px 12px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text);
+    font-size: 0.875rem;
+  }
+
+  .config-field .hint {
+    font-size: 0.7rem;
+    color: var(--muted);
+    margin-top: 2px;
+  }
+
+  .hour-picker {
+    display: grid;
+    grid-template-columns: repeat(12, 1fr);
+    gap: 4px;
+    margin-top: 6px;
+  }
+  @media (max-width: 800px) {
+    .hour-picker { grid-template-columns: repeat(8, 1fr); }
+  }
+
+  .hour-btn {
+    padding: 6px 0;
+    text-align: center;
+    font-size: 0.7rem;
+    font-weight: 500;
+    border-radius: 4px;
+    cursor: pointer;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--muted);
+    transition: all 0.15s;
+    user-select: none;
+  }
+  .hour-btn:hover {
+    border-color: var(--accent);
+    color: var(--text);
+  }
+  .hour-btn.active {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: white;
+  }
+
+  .hour-picker-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 4px;
+  }
+  .hour-picker-header label {
+    font-size: 0.75rem;
+    color: var(--muted);
+  }
+  .hour-picker-actions {
+    display: flex;
+    gap: 6px;
+  }
+  .hour-picker-actions button {
+    padding: 2px 8px;
+    font-size: 0.65rem;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--muted);
+    border-radius: 4px;
+  }
+  .hour-picker-actions button:hover {
+    color: var(--text);
+    background: var(--border);
+  }
+
+  .hour-summary {
+    font-size: 0.75rem;
+    color: var(--muted);
+    margin-top: 6px;
+  }
+  .hour-summary strong { color: var(--text); }
+
+  /* Table */
+  .table-container {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow-x: auto;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.875rem;
+  }
+
+  th {
+    text-align: left;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border);
+    font-weight: 600;
+    color: var(--muted);
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    white-space: nowrap;
+  }
+
+  td {
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--border);
+    max-width: 300px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: rgba(99, 102, 241, 0.05); }
+
+  .badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 0.75rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: opacity 0.2s;
+  }
+  .badge:hover { opacity: 0.8; }
+  .badge.concluido { background: rgba(34,197,94,0.15); color: var(--green); }
+  .badge.pendente { background: rgba(234,179,8,0.15); color: var(--yellow); }
+  .badge.erro { background: rgba(239,68,68,0.15); color: var(--red); }
+  .badge.clickable { text-decoration: underline; cursor: pointer; }
+
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+
+  .privacy-toggle {
+    cursor: pointer;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 0.75rem;
+    font-weight: 500;
+    background: rgba(99,102,241,0.12);
+    color: var(--accent);
+    transition: all 0.2s;
+    user-select: none;
+  }
+  .privacy-toggle:hover { background: rgba(99,102,241,0.25); }
+  .privacy-toggle.saving { opacity: 0.5; pointer-events: none; }
+
+  /* Toolbar filters */
+  .toolbar {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    padding: 10px 16px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-bottom: none;
+    border-radius: 8px 8px 0 0;
+    flex-wrap: wrap;
+  }
+  .toolbar + .table-container { border-radius: 0 0 8px 8px; }
+
+  .toolbar input[type="text"] {
+    flex: 1;
+    min-width: 180px;
+    padding: 6px 12px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text);
+    font-size: 0.8rem;
+  }
+  .toolbar input[type="text"]::placeholder { color: var(--muted); }
+
+  .toolbar select {
+    padding: 6px 10px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text);
+    font-size: 0.8rem;
+  }
+
+  .toolbar .toolbar-label {
+    font-size: 0.7rem;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+  }
+
+  .toolbar .result-count {
+    font-size: 0.75rem;
+    color: var(--muted);
+    margin-left: auto;
+  }
+
+  .btn-delete {
+    background: none !important;
+    border: 1px solid var(--border) !important;
+    color: var(--muted) !important;
+    padding: 1px 6px !important;
+    font-size: 0.7rem !important;
+    margin-left: 8px;
+    opacity: 0;
+    transition: opacity 0.2s;
+  }
+  tr:hover .btn-delete { opacity: 1; }
+  .btn-delete:hover {
+    color: var(--red) !important;
+    border-color: var(--red) !important;
+  }
+
+  /* Modal */
+  .modal-overlay {
+    display: none;
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0,0,0,0.7);
+    z-index: 100;
+    justify-content: center;
+    align-items: flex-start;
+    padding: 40px 20px;
+    overflow-y: auto;
+  }
+  .modal-overlay.show { display: flex; }
+
+  .modal {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    width: 100%;
+    max-width: 900px;
+    max-height: 85vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .modal-header h2 {
+    font-size: 1.1rem;
+    font-weight: 600;
+  }
+
+  .modal-close {
+    background: none;
+    border: none;
+    color: var(--muted);
+    font-size: 1.5rem;
+    cursor: pointer;
+    padding: 0 4px;
+    line-height: 1;
+  }
+  .modal-close:hover { color: var(--text); background: none; }
+
+  .modal-body {
+    padding: 20px;
+    overflow-y: auto;
+    flex: 1;
+  }
+
+  .modal-body pre {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 16px;
+    font-size: 0.8rem;
+    line-height: 1.5;
+    white-space: pre-wrap;
+    word-break: break-word;
+    max-height: 500px;
+    overflow-y: auto;
+  }
+
+  .clips-grid {
+    display: grid;
+    gap: 12px;
+  }
+
+  .clip-card {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px 16px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 16px;
+  }
+
+  .clip-info { flex: 1; min-width: 0; }
+  .clip-info .clip-title {
+    font-weight: 500;
+    margin-bottom: 4px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .clip-info .clip-meta {
+    font-size: 0.75rem;
+    color: var(--muted);
+  }
+  .clip-info .clip-tags {
+    font-size: 0.7rem;
+    color: var(--muted);
+    margin-top: 2px;
+  }
+
+  .clip-actions { display: flex; gap: 8px; flex-shrink: 0; }
+
+  /* Filter bar */
+  .filter-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 16px;
+    background: rgba(99, 102, 241, 0.08);
+    border-bottom: 1px solid var(--border);
+    font-size: 0.85rem;
+  }
+  .filter-bar .filter-text { color: var(--accent); }
+  .filter-bar button {
+    padding: 2px 8px;
+    font-size: 0.75rem;
+    background: var(--border);
+  }
+
+  /* Toast */
+  .toast {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    padding: 12px 20px;
+    border-radius: 8px;
+    font-size: 0.875rem;
+    z-index: 1000;
+    display: none;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+  }
+  .toast.show { display: block; }
+  .toast.success { border-left: 3px solid var(--green); }
+  .toast.error { border-left: 3px solid var(--red); }
+
+  .spinner {
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    border: 2px solid var(--muted);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    margin-right: 6px;
+    vertical-align: middle;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .empty {
+    text-align: center;
+    padding: 40px;
+    color: var(--muted);
+  }
+
+</style>
+</head>
+<body>
+
+<div class="container">
+  <header>
+    <h1><span>GWS</span> Lives & Clips</h1>
+    <div class="header-actions">
+      <button class="secondary" onclick="toggleConfig()">Configuracoes</button>
+      <button onclick="syncLives()" id="btnSync">Sincronizar Lives</button>
+    </div>
+  </header>
+
+  <!-- Stats -->
+  <div class="stats" id="stats">
+    <div class="stat-card">
+      <div class="label">Total Lives</div>
+      <div class="value blue" id="statLives">-</div>
+    </div>
+    <div class="stat-card">
+      <div class="label">Lives Cortadas</div>
+      <div class="value green" id="statCortadas">-</div>
+    </div>
+    <div class="stat-card">
+      <div class="label">Pendentes</div>
+      <div class="value yellow" id="statPendentes">-</div>
+    </div>
+    <div class="stat-card">
+      <div class="label">Clips Publicados</div>
+      <div class="value green" id="statPublicados">-</div>
+    </div>
+  </div>
+
+  <!-- Config Panel -->
+  <div class="config-panel" id="configPanel">
+
+    <!-- Corte / Producao (em cima) -->
+    <div class="config-section">
+      <h3>Producao de Cortes</h3>
+      <div class="config-grid" style="grid-template-columns: 1fr 1fr;">
+        <div class="config-field">
+          <label>Corte automatico</label>
+          <select id="cfgCorteAuto">
+            <option value="true">Sim</option>
+            <option value="false">Nao</option>
+          </select>
+        </div>
+        <div class="config-field">
+          <label>Lives por execucao</label>
+          <input type="number" id="cfgCorteMax" min="1" max="50" value="3">
+          <div class="hint">Quantas lives processar por vez</div>
+        </div>
+      </div>
+      <div style="margin-top: 14px;">
+        <div class="hour-picker-header">
+          <label>Horarios de corte (clique para ativar/desativar)</label>
+          <div class="hour-picker-actions">
+            <button onclick="hourPickerSelectAll('corte')">Todas</button>
+            <button onclick="hourPickerClearAll('corte')">Limpar</button>
+          </div>
+        </div>
+        <div class="hour-picker" id="corteHourPicker"></div>
+        <div class="hour-summary" id="corteSummary"></div>
+      </div>
+    </div>
+
+    <!-- Publicacao (embaixo) -->
+    <div class="config-section">
+      <h3>Publicacao de Clips</h3>
+      <div class="config-grid" style="grid-template-columns: 1fr 1fr;">
+        <div class="config-field">
+          <label>Privacidade padrao</label>
+          <select id="cfgPrivacy">
+            <option value="unlisted">Unlisted</option>
+            <option value="public">Public</option>
+            <option value="private">Private</option>
+          </select>
+        </div>
+      </div>
+      <div style="margin-top: 14px;">
+        <div class="hour-picker-header">
+          <label>Horarios de publicacao (clique para ativar/desativar)</label>
+          <div class="hour-picker-actions">
+            <button onclick="hourPickerSelectAll('pub')">Todas</button>
+            <button onclick="hourPickerClearAll('pub')">Limpar</button>
+          </div>
+        </div>
+        <div class="hour-picker" id="pubHourPicker"></div>
+        <div class="hour-summary" id="pubSummary"></div>
+      </div>
+    </div>
+
+    <div style="margin-top: 8px;">
+      <button onclick="saveConfig()" id="btnSave">Salvar Configuracoes</button>
+    </div>
+  </div>
+
+  <!-- Tabs -->
+  <div class="tabs" id="tabsBar">
+    <button class="tab active" data-tab="lives" onclick="showTab('lives', this)">Lives</button>
+    <button class="tab" data-tab="publicados" onclick="showTab('publicados', this)">Clips Publicados</button>
+  </div>
+
+  <!-- Lives Toolbar + Table -->
+  <div id="tabLives">
+    <div class="toolbar">
+      <input type="text" id="livesSearch" placeholder="Pesquisar por titulo..." oninput="filterLives()">
+      <span class="toolbar-label">Situacao:</span>
+      <select id="livesStatus" onchange="filterLives()">
+        <option value="">Todas</option>
+        <option value="pendente">Pendentes</option>
+        <option value="concluido">Concluidas</option>
+      </select>
+      <span class="toolbar-label">Ordem:</span>
+      <select id="livesOrder" onchange="filterLives()">
+        <option value="oldest">Mais antigas</option>
+        <option value="newest">Mais recentes</option>
+        <option value="title">Titulo A-Z</option>
+        <option value="duration-desc">Maior duracao</option>
+        <option value="duration-asc">Menor duracao</option>
+      </select>
+      <span class="result-count" id="livesCount"></span>
+    </div>
+    <div class="table-container">
+      <table>
+        <thead>
+          <tr>
+            <th>Video</th>
+            <th>Titulo</th>
+            <th>Data</th>
+            <th>Duracao</th>
+            <th>Transcricao</th>
+            <th>Cortes</th>
+            <th>Clips</th>
+            <th>Publicados</th>
+          </tr>
+        </thead>
+        <tbody id="livesBody">
+          <tr><td colspan="8" class="empty">Carregando...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Publicados Toolbar + Table -->
+  <div id="tabPublicados" style="display:none">
+    <div class="toolbar">
+      <input type="text" id="pubSearch" placeholder="Pesquisar por titulo ou tags..." oninput="filterPubs()">
+      <span class="toolbar-label">Privacy:</span>
+      <select id="pubPrivacy" onchange="filterPubs()">
+        <option value="">Todas</option>
+        <option value="unlisted">Unlisted</option>
+        <option value="public">Public</option>
+        <option value="private">Private</option>
+      </select>
+      <span class="toolbar-label">Ordem:</span>
+      <select id="pubOrder" onchange="filterPubs()">
+        <option value="newest">Mais recentes</option>
+        <option value="oldest">Mais antigos</option>
+        <option value="title">Titulo A-Z</option>
+        <option value="duration-desc">Maior duracao</option>
+      </select>
+      <span class="result-count" id="pubCount"></span>
+    </div>
+    <div class="table-container">
+      <div class="filter-bar" id="pubFilter" style="display:none">
+        <span class="filter-text">Filtrando clips da live: <strong id="pubFilterId"></strong></span>
+        <button onclick="clearPubFilter()">Limpar filtro</button>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>Clip</th>
+            <th>Titulo</th>
+            <th>Live Origem</th>
+            <th>Data Pub.</th>
+            <th>Privacy</th>
+            <th>Duracao</th>
+            <th>Tags</th>
+          </tr>
+      </thead>
+      <tbody id="pubBody">
+        <tr><td colspan="7" class="empty">Carregando...</td></tr>
+      </tbody>
+    </table>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Transcricao -->
+<div class="modal-overlay" id="modalTranscript" onclick="if(event.target===this)closeModal('modalTranscript')">
+  <div class="modal">
+    <div class="modal-header">
+      <h2 id="modalTranscriptTitle">Transcricao</h2>
+      <button class="modal-close" onclick="closeModal('modalTranscript')">x</button>
+    </div>
+    <div class="modal-body">
+      <div id="modalTranscriptContent">Carregando...</div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Clips de uma Live -->
+<div class="modal-overlay" id="modalClips" onclick="if(event.target===this)closeModal('modalClips')">
+  <div class="modal">
+    <div class="modal-header">
+      <h2 id="modalClipsTitle">Clips</h2>
+      <button class="modal-close" onclick="closeModal('modalClips')">x</button>
+    </div>
+    <div class="modal-body">
+      <div id="modalClipsContent">Carregando...</div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const API = '';
+let allLives = [];
+let allPublicados = [];
+let currentPubFilter = null;
+
+async function fetchJson(url, opts) {
+  const resp = await fetch(API + url, opts);
+  return resp.json();
+}
+
+function showToast(msg, type = 'success') {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast show ' + type;
+  setTimeout(() => t.className = 'toast', 3000);
+}
+
+function badge(status, opts = {}) {
+  const cls = status === 'concluido' ? 'concluido' : status === 'erro' ? 'erro' : 'pendente';
+  const clickable = opts.clickable ? ' clickable' : '';
+  const onclick = opts.onclick ? ` onclick="${opts.onclick}"` : '';
+  const title = opts.title ? ` title="${opts.title}"` : '';
+  return `<span class="badge ${cls}${clickable}"${onclick}${title}>${status || 'pendente'}</span>`;
+}
+
+function showTab(name, btn) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  else document.querySelector(`.tab[data-tab="${name}"]`).classList.add('active');
+  document.getElementById('tabLives').style.display = name === 'lives' ? 'block' : 'none';
+  document.getElementById('tabPublicados').style.display = name === 'publicados' ? 'block' : 'none';
+}
+
+function toggleConfig() {
+  document.getElementById('configPanel').classList.toggle('visible');
+}
+
+// --- Hour Picker ---
+const hourState = { pub: new Set(), corte: new Set() };
+
+function buildHourPicker(name) {
+  const container = document.getElementById(name + 'HourPicker');
+  container.innerHTML = '';
+  for (let h = 0; h < 24; h++) {
+    const label = String(h).padStart(2, '0') + ':00';
+    const btn = document.createElement('div');
+    btn.className = 'hour-btn' + (hourState[name].has(h) ? ' active' : '');
+    btn.textContent = label;
+    btn.onclick = () => {
+      if (hourState[name].has(h)) hourState[name].delete(h);
+      else hourState[name].add(h);
+      btn.classList.toggle('active');
+      updateHourSummary(name);
+    };
+    container.appendChild(btn);
+  }
+  updateHourSummary(name);
+}
+
+function updateHourSummary(name) {
+  const el = document.getElementById(name + 'Summary');
+  const count = hourState[name].size;
+  if (count === 0) {
+    el.innerHTML = 'Nenhum horario selecionado';
+  } else if (count === 24) {
+    el.innerHTML = '<strong>24x por dia</strong> — a cada hora';
+  } else {
+    const sorted = [...hourState[name]].sort((a,b) => a-b);
+    const labels = sorted.map(h => String(h).padStart(2,'0') + ':00');
+    el.innerHTML = `<strong>${count}x por dia</strong> — ${labels.join(', ')}`;
+  }
+}
+
+function hourPickerSelectAll(name) {
+  for (let h = 0; h < 24; h++) hourState[name].add(h);
+  buildHourPicker(name);
+}
+
+function hourPickerClearAll(name) {
+  hourState[name].clear();
+  buildHourPicker(name);
+}
+
+function hoursToString(name) {
+  const sorted = [...hourState[name]].sort((a,b) => a-b);
+  return sorted.map(h => String(h).padStart(2,'0') + ':00').join(',');
+}
+
+function stringToHours(str) {
+  const set = new Set();
+  if (!str) return set;
+  str.split(',').forEach(t => {
+    t = t.trim();
+    const m = t.match(/^(\d{1,2}):/);
+    if (m) set.add(parseInt(m[1]));
+  });
+  return set;
+}
+
+// --- Modals ---
+function openModal(id) {
+  document.getElementById(id).classList.add('show');
+}
+
+function closeModal(id) {
+  document.getElementById(id).classList.remove('show');
+}
+
+// --- Transcript modal ---
+async function openTranscript(videoId, titulo) {
+  document.getElementById('modalTranscriptTitle').textContent = 'Transcricao: ' + titulo;
+  document.getElementById('modalTranscriptContent').innerHTML = '<span class="spinner"></span> Carregando...';
+  openModal('modalTranscript');
+
+  const data = await fetchJson('/api/transcript?id=' + videoId);
+
+  if (data.has_transcript) {
+    document.getElementById('modalTranscriptContent').innerHTML =
+      `<pre>${escapeHtml(data.transcript)}</pre>`;
+  } else {
+    document.getElementById('modalTranscriptContent').innerHTML =
+      `<div class="empty">Transcricao nao disponivel para este video.<br>
+       Rode: <code>yt-clip ${videoId}</code> para gerar.</div>`;
+  }
+}
+
+// --- Clips modal (filtered from publicados) ---
+async function openClips(videoId, titulo) {
+  document.getElementById('modalClipsTitle').textContent = 'Clips: ' + titulo;
+  document.getElementById('modalClipsContent').innerHTML = '<span class="spinner"></span> Carregando...';
+  openModal('modalClips');
+
+  const data = await fetchJson('/api/publicados?live=' + videoId);
+  const clips = data.publicados || [];
+
+  if (clips.length === 0) {
+    // Check if topics exist locally
+    const tData = await fetchJson('/api/transcript?id=' + videoId);
+    if (tData.has_topics) {
+      const topics = tData.topics.topics || [];
+      document.getElementById('modalClipsContent').innerHTML =
+        `<p style="margin-bottom:12px;color:var(--muted)">${topics.length} topicos identificados (nao publicados ainda)</p>` +
+        '<div class="clips-grid">' + topics.map((t, i) => `
+          <div class="clip-card">
+            <div class="clip-info">
+              <div class="clip-title">${i+1}. ${escapeHtml(t.title)}</div>
+              <div class="clip-meta">${t.start} - ${t.end} | ${escapeHtml(t.description || '').substring(0,100)}</div>
+              <div class="clip-tags">${(t.tags||[]).join(', ')}</div>
+            </div>
+          </div>
+        `).join('') + '</div>';
+    } else {
+      document.getElementById('modalClipsContent').innerHTML =
+        `<div class="empty">Nenhum clip encontrado para este video.<br>
+         Rode: <code>yt-clip ${videoId}</code> para gerar cortes.</div>`;
+    }
+    return;
+  }
+
+  document.getElementById('modalClipsContent').innerHTML =
+    `<p style="margin-bottom:12px;color:var(--muted)">${clips.length} clips publicados</p>` +
+    '<div class="clips-grid">' + clips.map((c, i) => `
+      <div class="clip-card">
+        <div class="clip-info">
+          <div class="clip-title">${i+1}. ${escapeHtml(c.clip_titulo)}</div>
+          <div class="clip-meta">${c.privacy} | ${c.duracao_seg ? Math.round(c.duracao_seg/60)+' min' : '-'} | ${c.data_publicacao}</div>
+          <div class="clip-tags">${c.tags || '-'}</div>
+        </div>
+        <div class="clip-actions">
+          <a href="${c.clip_url}" target="_blank"><button class="small secondary">Assistir</button></a>
+          <button class="small secondary" onclick="filterPubByLive('${c.live_video_id}');closeModal('modalClips')">Ver na tabela</button>
+        </div>
+      </div>
+    `).join('') + '</div>';
+}
+
+// --- Publicados filter ---
+function filterPubByLive(videoId) {
+  currentPubFilter = videoId;
+  showTab('publicados');
+  loadPublicados(videoId);
+}
+
+function clearPubFilter() {
+  currentPubFilter = null;
+  document.getElementById('pubFilter').style.display = 'none';
+  loadPublicados();
+}
+
+function escapeHtml(text) {
+  const d = document.createElement('div');
+  d.textContent = text || '';
+  return d.innerHTML;
+}
+
+// --- Load data ---
+async function loadStats() {
+  const data = await fetchJson('/api/stats');
+  document.getElementById('statLives').textContent = data.total_lives;
+  document.getElementById('statCortadas').textContent = data.lives_cortadas;
+  document.getElementById('statPendentes').textContent = data.lives_pendentes;
+  document.getElementById('statPublicados').textContent = data.total_publicados;
+}
+
+async function loadLives() {
+  const data = await fetchJson('/api/lives');
+  allLives = data.lives || [];
+  filterLives();
+}
+
+function filterLives() {
+  const search = (document.getElementById('livesSearch').value || '').toLowerCase();
+  const status = document.getElementById('livesStatus').value;
+  const order = document.getElementById('livesOrder').value;
+  const tbody = document.getElementById('livesBody');
+
+  let filtered = allLives.filter(l => {
+    if (search && !l.titulo.toLowerCase().includes(search)) return false;
+    if (status === 'pendente' && l.status_cortes === 'concluido') return false;
+    if (status === 'concluido' && l.status_cortes !== 'concluido') return false;
+    return true;
+  });
+
+  // Sort
+  filtered.sort((a, b) => {
+    switch (order) {
+      case 'newest': return (b.data_live || '').localeCompare(a.data_live || '');
+      case 'oldest': return (a.data_live || '').localeCompare(b.data_live || '');
+      case 'title': return (a.titulo || '').localeCompare(b.titulo || '');
+      case 'duration-desc': return (parseInt(b.duracao_min)||0) - (parseInt(a.duracao_min)||0);
+      case 'duration-asc': return (parseInt(a.duracao_min)||0) - (parseInt(b.duracao_min)||0);
+      default: return 0;
+    }
+  });
+
+  document.getElementById('livesCount').textContent = filtered.length + ' / ' + allLives.length;
+
+  if (filtered.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="8" class="empty">Nenhuma live encontrada.</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = filtered.map(l => {
+    const transcBadge = badge(l.status_transcricao, {
+      clickable: l.status_transcricao === 'concluido',
+      onclick: `openTranscript('${l.video_id}','${escapeHtml(l.titulo).replace(/'/g,"\\'")}')`,
+      title: 'Clique para ver a transcricao'
+    });
+    const cortesBadge = badge(l.status_cortes, {
+      clickable: l.status_cortes === 'concluido',
+      onclick: `openClips('${l.video_id}','${escapeHtml(l.titulo).replace(/'/g,"\\'")}')`,
+      title: 'Clique para ver os clips'
+    });
+
+    return `
+    <tr>
+      <td><a href="${l.url}" target="_blank">${l.video_id}</a></td>
+      <td title="${escapeHtml(l.titulo)}">${escapeHtml(l.titulo)}</td>
+      <td>${l.data_live}</td>
+      <td>${l.duracao_min ? l.duracao_min + ' min' : '-'}</td>
+      <td>${transcBadge}</td>
+      <td>${cortesBadge}</td>
+      <td>${l.qtd_clips || '0'}</td>
+      <td>${l.clips_publicados || '0'} / ${l.qtd_clips || '0'}${l.data_publicacao ? '<br><span style="font-size:0.7rem;color:var(--muted)">' + l.data_publicacao + '</span>' : ''}</td>
+    </tr>`;
+  }).join('');
+}
+
+async function loadPublicados(filterLiveId) {
+  const url = filterLiveId ? '/api/publicados?live=' + filterLiveId : '/api/publicados';
+  const data = await fetchJson(url);
+  allPublicados = data.publicados || [];
+  currentPubFilter = filterLiveId || null;
+
+  const filterBar = document.getElementById('pubFilter');
+  if (filterLiveId) {
+    filterBar.style.display = 'flex';
+    document.getElementById('pubFilterId').textContent = filterLiveId;
+  } else {
+    filterBar.style.display = 'none';
+  }
+
+  filterPubs();
+}
+
+function filterPubs() {
+  const search = (document.getElementById('pubSearch').value || '').toLowerCase();
+  const privacy = document.getElementById('pubPrivacy').value;
+  const order = document.getElementById('pubOrder').value;
+  const tbody = document.getElementById('pubBody');
+
+  let filtered = allPublicados.filter(p => {
+    if (search) {
+      const haystack = (p.clip_titulo + ' ' + (p.tags || '')).toLowerCase();
+      if (!haystack.includes(search)) return false;
+    }
+    if (privacy && p.privacy !== privacy) return false;
+    return true;
+  });
+
+  filtered.sort((a, b) => {
+    switch (order) {
+      case 'newest': return (b.data_publicacao || '').localeCompare(a.data_publicacao || '');
+      case 'oldest': return (a.data_publicacao || '').localeCompare(b.data_publicacao || '');
+      case 'title': return (a.clip_titulo || '').localeCompare(b.clip_titulo || '');
+      case 'duration-desc': return (parseInt(b.duracao_seg)||0) - (parseInt(a.duracao_seg)||0);
+      default: return 0;
+    }
+  });
+
+  document.getElementById('pubCount').textContent = filtered.length + ' / ' + allPublicados.length;
+
+  if (filtered.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="7" class="empty">Nenhum clip encontrado.</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = filtered.map(p => `
+    <tr>
+      <td><a href="${p.clip_url}" target="_blank">${p.clip_video_id}</a></td>
+      <td title="${escapeHtml(p.clip_titulo)}">${escapeHtml(p.clip_titulo)}</td>
+      <td><a href="https://www.youtube.com/watch?v=${p.live_video_id}" target="_blank">${escapeHtml(p.live_titulo || p.live_video_id)}</a></td>
+      <td>${p.data_publicacao}</td>
+      <td><span class="privacy-toggle" onclick="cyclePrivacy(this, '${p.clip_video_id}')" title="Clique para mudar">${p.privacy}</span></td>
+      <td>${p.duracao_seg ? Math.round(p.duracao_seg/60) + ' min' : '-'}</td>
+      <td>
+        ${p.tags || '-'}
+        <button class="small btn-delete" onclick="deleteClip('${p.clip_video_id}', '${escapeHtml(p.clip_titulo).replace(/'/g,"\\'")}', this)" title="Excluir clip">x</button>
+      </td>
+    </tr>
+  `).join('');
+}
+
+async function loadConfig() {
+  const data = await fetchJson('/api/config');
+  const c = data.config;
+
+  // Publicacao
+  if (c.privacy_padrao) document.getElementById('cfgPrivacy').value = c.privacy_padrao;
+  hourState.pub = stringToHours(c.pub_horarios || '08:00,11:00,14:00,17:00');
+  buildHourPicker('pub');
+
+  // Cortes
+  if (c.corte_auto) document.getElementById('cfgCorteAuto').value = c.corte_auto;
+  if (c.corte_max_por_dia) document.getElementById('cfgCorteMax').value = c.corte_max_por_dia;
+  hourState.corte = stringToHours(c.corte_horarios || '06:00,18:00');
+  buildHourPicker('corte');
+}
+
+async function saveConfig() {
+  const btn = document.getElementById('btnSave');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span>Salvando...';
+
+  const data = {
+    pub_horarios: hoursToString('pub'),
+    privacy_padrao: document.getElementById('cfgPrivacy').value,
+    corte_auto: document.getElementById('cfgCorteAuto').value,
+    corte_horarios: hoursToString('corte'),
+    corte_max_por_dia: document.getElementById('cfgCorteMax').value
+  };
+
+  try {
+    await fetchJson('/api/config', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(data)
+    });
+
+    btn.innerHTML = 'Salvo!';
+    btn.className = 'saved';
+    setTimeout(() => {
+      btn.innerHTML = 'Salvar Configuracoes';
+      btn.className = '';
+      btn.disabled = false;
+    }, 2000);
+  } catch (e) {
+    btn.innerHTML = 'Erro ao salvar';
+    btn.style.background = 'var(--red)';
+    setTimeout(() => {
+      btn.innerHTML = 'Salvar Configuracoes';
+      btn.style.background = '';
+      btn.disabled = false;
+    }, 2000);
+  }
+}
+
+async function syncLives() {
+  const btn = document.getElementById('btnSync');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span>Sincronizando...';
+
+  try {
+    const data = await fetchJson('/api/sync', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({max_pages: 5})
+    });
+
+    showToast(`Sync completo! ${data.novas_lives} novas lives encontradas.`);
+    await loadAll();
+  } catch (e) {
+    showToast('Erro ao sincronizar: ' + e.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Sincronizar Lives';
+  }
+}
+
+async function loadAll() {
+  await Promise.all([loadStats(), loadLives(), loadPublicados(), loadConfig()]);
+}
+
+// --- Privacy cycle & Delete ---
+const privacyOrder = ['unlisted', 'public', 'private'];
+
+async function cyclePrivacy(el, clipId) {
+  const current = el.textContent.trim();
+  const idx = privacyOrder.indexOf(current);
+  const next = privacyOrder[(idx + 1) % privacyOrder.length];
+
+  el.classList.add('saving');
+  el.textContent = next + '...';
+
+  try {
+    const resp = await fetchJson('/api/clip/privacy', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({clip_video_id: clipId, privacy: next})
+    });
+
+    if (resp.ok) {
+      el.textContent = next;
+      showToast(`Privacy de ${clipId} alterado para ${next}`);
+    } else {
+      el.textContent = current;
+      showToast('Erro ao alterar privacy', 'error');
+    }
+  } catch (e) {
+    el.textContent = current;
+    showToast('Erro: ' + e.message, 'error');
+  }
+  el.classList.remove('saving');
+}
+
+async function deleteClip(clipId, titulo, btn) {
+  if (!confirm(`Excluir clip "${titulo}" (${clipId}) do YouTube e da planilha?`)) return;
+
+  btn.disabled = true;
+  btn.textContent = '...';
+
+  try {
+    const resp = await fetchJson('/api/clip/delete', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({clip_video_id: clipId})
+    });
+
+    if (resp.ok) {
+      btn.closest('tr').remove();
+      showToast(`Clip ${clipId} excluido`);
+      loadStats();
+    } else {
+      showToast('Erro ao excluir', 'error');
+      btn.disabled = false;
+      btn.textContent = 'x';
+    }
+  } catch (e) {
+    showToast('Erro: ' + e.message, 'error');
+    btn.disabled = false;
+    btn.textContent = 'x';
+  }
+}
+
+// Keyboard: Escape closes modals
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') {
+    document.querySelectorAll('.modal-overlay.show').forEach(m => m.classList.remove('show'));
+  }
+});
+
+loadAll();
+</script>
+
+</body>
+</html>
