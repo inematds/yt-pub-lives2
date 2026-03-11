@@ -9,3 +9,15 @@ services:
     env_file:
       - ./config/.env
     restart: unless-stopped
+
+  scheduler:
+    build: .
+    command: python3 /app/scheduler.py
+    volumes:
+      - ./config:/config
+      - ./lives:/data/lives
+    env_file:
+      - ./config/.env
+    restart: unless-stopped
+    depends_on:
+      - dashboard
