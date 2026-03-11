@@ -11,6 +11,7 @@ import sys
 import time
 import subprocess
 import base64
+import tempfile
 import urllib.request
 import urllib.parse
 from datetime import datetime
@@ -193,6 +194,115 @@ def run_publicacao(video_id, clip_file, title, description, tags, privacy):
         return None
 
 
+def upload_thumbnail(video_id, thumb_path):
+    """Upload thumbnail to YouTube using thumbnails.set API."""
+    token = get_access_token()
+    url = f'https://www.googleapis.com/upload/youtube/v3/thumbnails/set?videoId={video_id}&uploadType=media'
+
+    with open(thumb_path, 'rb') as f:
+        img_data = f.read()
+
+    req = urllib.request.Request(url, data=img_data, method='POST')
+    req.add_header('Authorization', f'Bearer {token}')
+    req.add_header('Content-Type', 'image/jpeg')
+    req.add_header('Content-Length', str(len(img_data)))
+
+    resp = urllib.request.urlopen(req, timeout=60)
+    result = json.loads(resp.read())
+    log(f'  Thumbnail uploaded for {video_id}')
+    return result
+
+
+def handle_thumbnail(video_id, title, description, config):
+    """Generate and upload thumbnail based on config thumb_mode."""
+    thumb_mode = config.get('thumb_mode', 'none')
+    if thumb_mode == 'none':
+        return
+
+    thumb_path = f'/tmp/yt_thumb_{video_id}.jpg'
+
+    try:
+        if thumb_mode == 'api':
+            # Set API key and model from config before importing
+            api_key = config.get('thumb_api_key', '')
+            model = config.get('thumb_model', 'dreamshaper')
+            if api_key:
+                os.environ['PIRAMYD_API_KEY'] = api_key
+            os.environ['THUMB_MODEL'] = model
+
+            # Import generate_thumbnail from scripts/yt-thumbnail
+            import importlib.util
+            script_path = os.path.join(SCRIPTS_DIR, 'yt-thumbnail')
+            spec = importlib.util.spec_from_file_location('yt_thumbnail', script_path)
+            yt_thumb = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(yt_thumb)
+
+            log(f'  Generating API thumbnail for {video_id} (model: {model})')
+            yt_thumb.generate_thumbnail(title, description, thumb_path)
+
+        elif thumb_mode == 'local':
+            # Local Pillow-based: extract frame from video + overlay text
+            log(f'  Generating local thumbnail for {video_id}')
+            from PIL import Image, ImageDraw, ImageFont
+
+            # Create simple gradient background with text overlay
+            img = Image.new('RGB', (1280, 720))
+            for y in range(720):
+                r = int(10 + 10 * y / 720)
+                g = int(10 + 5 * y / 720)
+                b = int(30 + 20 * y / 720)
+                for x in range(1280):
+                    img.putpixel((x, y), (r, g, b))
+
+            draw = ImageDraw.Draw(img)
+            font_path = '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf'
+            try:
+                font = ImageFont.truetype(font_path, 64)
+            except Exception:
+                font = ImageFont.load_default()
+
+            # Wrap and draw title text
+            words = title[:60].upper().split()
+            lines, current = [], ''
+            for word in words:
+                test = (current + ' ' + word).strip()
+                bbox = draw.textbbox((0, 0), test, font=font)
+                if bbox[2] - bbox[0] > 1000 and current:
+                    lines.append(current)
+                    current = word
+                else:
+                    current = test
+            if current:
+                lines.append(current)
+
+            y_pos = 80
+            for line in lines[:3]:
+                # Shadow
+                for dx in range(-2, 3):
+                    for dy in range(-2, 3):
+                        draw.text((130 + dx, y_pos + dy), line, font=font, fill=(0, 0, 0))
+                draw.text((130, y_pos), line, font=font, fill=(255, 255, 255))
+                y_pos += 80
+
+            img.save(thumb_path, 'JPEG', quality=92)
+
+        else:
+            log(f'  Unknown thumb_mode: {thumb_mode}, skipping')
+            return
+
+        # Upload to YouTube
+        if os.path.exists(thumb_path):
+            upload_thumbnail(video_id, thumb_path)
+            # Clean up temp file
+            try:
+                os.remove(thumb_path)
+            except OSError:
+                pass
+
+    except Exception as e:
+        log(f'  Thumbnail error (non-fatal): {e}')
+
+
 def update_live_status(row_num, headers, row_data, status_field, new_status, extra=None):
     """Atualiza status de uma live na planilha."""
     if status_field in headers:
@@ -315,6 +425,12 @@ def process_publicacao(config):
             )
 
             if new_vid:
+                # Generate and upload thumbnail
+                handle_thumbnail(
+                    new_vid, clip['title'],
+                    clip.get('description', ''), config
+                )
+
                 # Add to PUBLICADOS sheet
                 from datetime import datetime as dt
                 now = dt.now().strftime('%Y-%m-%d %H:%M')

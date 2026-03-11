@@ -1,0 +1,298 @@
+#!/usr/bin/env python3
+"""
+yt-thumbnail — Gera thumbnails para clips do YouTube
+Usa LLM para criar prompt estruturado + IA para gerar imagem
+
+Uso:
+  yt-thumbnail --title "Titulo do clip" --output thumb.jpg
+  yt-thumbnail --title "Titulo" --description "Sobre o que eh o clip"
+"""
+
+import sys
+import os
+import json
+import urllib.request
+from PIL import Image, ImageDraw, ImageFont, ImageFilter
+import io
+
+# Config
+CONFIG_DIR = os.environ.get('GWS_CONFIG_DIR', os.path.expanduser('~/.config/gws'))
+ENV_FILE = os.path.join(CONFIG_DIR, '.env')
+
+# Load env
+if os.path.exists(ENV_FILE):
+    with open(ENV_FILE) as f:
+        for line in f:
+            line = line.strip()
+            if line and not line.startswith('#') and '=' in line:
+                key, val = line.split('=', 1)
+                os.environ[key] = val
+
+PIRAMYD_API_KEY = os.environ.get('PIRAMYD_API_KEY', '')
+PIRAMYD_URL = 'https://api.piramyd.cloud/v1'
+IMAGE_MODEL = os.environ.get('THUMB_MODEL', 'flux2-klein-4b')
+CHAT_MODEL = 'claude-sonnet-4.5'
+
+BRAND = 'INEMA TDS'
+WIDTH = 1280
+HEIGHT = 720
+FONT_PATH = '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf'
+
+SYSTEM_PROMPT = """Voce e especialista na criacao de prompts para geracao de thumbnails de YouTube para o canal INEMA TDS (canal de tecnologia, programacao, IA e automacao).
+
+Sua missao e transformar qualquer titulo de video em um prompt detalhado, otimizado para alta taxa de cliques (CTR) e pronto para uso em geradores de imagem.
+
+Checklist:
+1) Analise o titulo e identifique tema e emocao central.
+2) Escolha uma metafora visual FORTE e INESPERADA ligada ao tema.
+3) Defina cores vibrantes e contrastantes.
+4) Crie uma frase curta e impactante (max 5 palavras em portugues).
+5) Pense na composicao: espaco para texto, foco visual, alto contraste.
+
+Diretrizes:
+- Estilo: fotorealista com iluminacao cinematica, alto contraste
+- Cores: vibrantes, contrastantes (neon azul, roxo, laranja, vermelho)
+- Proporcao: 16:9 (1792x1024)
+- A frase curta NAO e o titulo completo, e uma versao impactante de 2-5 palavras
+- Metafora visual deve ser algo CONCRETO e VISUAL (objeto, cena, acao)
+- NAO incluir: marcas d'agua, bordas, logotipos, emojis, textos longos, conteudo sensivel, maos deformadas
+
+Retorne SOMENTE este JSON:
+{
+  "frase_curta": "(string; 2-5 palavras impactantes em portugues)",
+  "cena_principal": "(string; descricao detalhada da cena/metafora visual principal)",
+  "fundo_tematico": "(string; cenario coerente com o tema)",
+  "cores_dominantes": "(string; cores vibrantes separadas por virgula)",
+  "composicao": "(string; como os elementos estao dispostos, onde fica o espaco para texto)",
+  "negative_prompt": "watermark, border, long text, deformed hands, extra fingers, cluttered, low quality, blurry text"
+}"""
+
+
+def generate_prompt_json(title, description=''):
+    """Usa LLM para gerar o JSON estruturado do prompt."""
+    user_msg = f'Titulo do video: "{title}"'
+    if description:
+        user_msg += f'\nDescricao: {description}'
+
+    payload = {
+        'model': CHAT_MODEL,
+        'messages': [
+            {'role': 'system', 'content': SYSTEM_PROMPT},
+            {'role': 'user', 'content': user_msg}
+        ],
+        'temperature': 0.7,
+        'max_tokens': 500
+    }
+
+    body = json.dumps(payload).encode()
+    req = urllib.request.Request(f'{PIRAMYD_URL}/chat/completions', data=body)
+    req.add_header('Content-Type', 'application/json')
+    req.add_header('Authorization', f'Bearer {PIRAMYD_API_KEY}')
+
+    print('  [1/3] Gerando prompt com LLM...', flush=True)
+
+    resp = urllib.request.urlopen(req, timeout=60)
+    result = json.loads(resp.read())
+    content = result['choices'][0]['message']['content']
+
+    # Extract JSON
+    import re
+    json_match = re.search(r'\{[\s\S]*\}', content)
+    if json_match:
+        return json.loads(json_match.group())
+    raise ValueError(f'LLM nao retornou JSON valido: {content[:200]}')
+
+
+def build_image_prompt(prompt_data):
+    """Monta o prompt final para o gerador de imagem."""
+    return (
+        f'Professional YouTube thumbnail, photorealistic, cinematic lighting. '
+        f'Scene: {prompt_data["cena_principal"]}. '
+        f'Background: {prompt_data["fundo_tematico"]}. '
+        f'Color scheme: {prompt_data["cores_dominantes"]}. '
+        f'Composition: {prompt_data["composicao"]}. '
+        f'Style: Realistic photo with cinematic lighting, high contrast, dramatic shadows, '
+        f'optimized for YouTube thumbnail. Aspect ratio 16:9. '
+        f'ABSOLUTELY NO TEXT, NO LETTERS, NO WORDS, NO WRITING IN THE IMAGE. '
+        f'Do not include: {prompt_data["negative_prompt"]}'
+    )
+
+
+def generate_ai_image(image_prompt):
+    """Gera imagem via Piramyd API."""
+    payload = {
+        'model': IMAGE_MODEL,
+        'prompt': image_prompt,
+        'n': 1,
+        'size': '1792x1024'
+    }
+
+    body = json.dumps(payload).encode()
+    req = urllib.request.Request(f'{PIRAMYD_URL}/images/generations', data=body)
+    req.add_header('Content-Type', 'application/json')
+    req.add_header('Authorization', f'Bearer {PIRAMYD_API_KEY}')
+
+    print(f'  [2/3] Gerando imagem com {IMAGE_MODEL}...', flush=True)
+
+    resp = urllib.request.urlopen(req, timeout=120)
+    result = json.loads(resp.read())
+
+    data = result.get('data', [])
+    if not data or not data[0].get('url'):
+        raise ValueError('API nao retornou imagem')
+
+    # Download
+    dl_req = urllib.request.Request(data[0]['url'])
+    dl_req.add_header('User-Agent', 'Mozilla/5.0')
+    with urllib.request.urlopen(dl_req, timeout=60) as resp:
+        img_data = resp.read()
+
+    img = Image.open(io.BytesIO(img_data))
+    img = img.resize((WIDTH, HEIGHT), Image.LANCZOS).convert('RGB')
+    return img
+
+
+def create_gradient_bg():
+    """Fallback local."""
+    img = Image.new('RGB', (WIDTH, HEIGHT))
+    for y in range(HEIGHT):
+        r = int(10 + 10 * y / HEIGHT)
+        g = int(10 + 5 * y / HEIGHT)
+        b = int(30 + 20 * y / HEIGHT)
+        for x in range(WIDTH):
+            img.putpixel((x, y), (r, g, b))
+    return img
+
+
+def wrap_text(text, font, max_width, draw):
+    """Quebra texto em linhas."""
+    words = text.split()
+    lines = []
+    current = ''
+    for word in words:
+        test = (current + ' ' + word).strip()
+        bbox = draw.textbbox((0, 0), test, font=font)
+        if bbox[2] - bbox[0] > max_width and current:
+            lines.append(current)
+            current = word
+        else:
+            current = test
+    if current:
+        lines.append(current)
+    return lines[:3]
+
+
+def compose_thumbnail(bg, frase_curta, cores_str, output_path):
+    """Compoe thumbnail final: imagem + texto overlay."""
+    # Parse accent color from cores string
+    accent_color = (0, 212, 255)  # default cyan
+    brand_color = (99, 102, 241)  # roxo
+
+    draw = ImageDraw.Draw(bg)
+
+    # Barra lateral accent
+    draw.rectangle([0, 0, 8, HEIGHT], fill=brand_color)
+
+    # Frase curta (grande e impactante)
+    font_size = 78
+    font = ImageFont.truetype(FONT_PATH, font_size)
+    max_text_width = int(WIDTH * 0.8)  # 80% central (10% margem cada lado)
+
+    lines = wrap_text(frase_curta.upper(), font, max_text_width, draw)
+
+    line_height = font_size + 16
+    total_height = len(lines) * line_height
+    # Posiciona no terco superior
+    x_start = int(WIDTH * 0.10)  # 10% margem esquerda
+    y_start = int(HEIGHT * 0.08)  # 8% do topo (formato aprovado v5)
+
+    # Sem fundo escuro atras do texto — sombra forte ja garante leitura
+    draw = ImageDraw.Draw(bg)
+
+    # Texto com outline/sombra forte (sem fundo escuro)
+    for i, line in enumerate(lines):
+        y = y_start + i * line_height
+        # Outline preto em todas as direcoes
+        for dx in range(-3, 4):
+            for dy in range(-3, 4):
+                if dx != 0 or dy != 0:
+                    draw.text((x_start + dx, y + dy), line, font=font, fill=(0, 0, 0))
+        # Texto branco
+        draw.text((x_start, y), line, font=font, fill=(255, 255, 255))
+
+    # Linha accent ciano abaixo do texto
+    accent_y = y_start + total_height + 8
+    draw.rectangle([x_start, accent_y, x_start + 250, accent_y + 5], fill=accent_color)
+
+    # Brand pill no canto inferior esquerdo
+    brand_font = ImageFont.truetype(FONT_PATH, 26)
+    bbox = draw.textbbox((0, 0), BRAND, font=brand_font)
+    brand_w = bbox[2] - bbox[0]
+    bx = WIDTH - brand_w - 45
+    by = HEIGHT - 55
+
+    bg_pill = Image.new('RGBA', (WIDTH, HEIGHT), (0, 0, 0, 0))
+    pill_draw = ImageDraw.Draw(bg_pill)
+    pill_draw.rounded_rectangle(
+        [bx - 14, by - 8, bx + brand_w + 14, by + 34],
+        radius=8, fill=(0, 0, 0, 180)
+    )
+    bg = bg.convert('RGBA')
+    bg = Image.alpha_composite(bg, bg_pill).convert('RGB')
+    draw = ImageDraw.Draw(bg)
+    draw.text((bx, by), BRAND, font=brand_font, fill=brand_color)
+
+    # Salvar
+    bg.save(output_path, 'JPEG', quality=92)
+    return output_path
+
+
+def generate_thumbnail(title, description='', output_path='thumbnail.jpg'):
+    """Pipeline completo: LLM prompt -> IA image -> Pillow compose."""
+    try:
+        # 1. LLM gera prompt estruturado
+        prompt_data = generate_prompt_json(title, description)
+        print(f'  Frase: "{prompt_data["frase_curta"]}"', flush=True)
+        print(f'  Cena: {prompt_data["cena_principal"][:80]}...', flush=True)
+
+        # 2. Gera imagem
+        image_prompt = build_image_prompt(prompt_data)
+        bg = generate_ai_image(image_prompt)
+
+        # 3. Compoe thumbnail
+        print('  [3/3] Compondo thumbnail...', flush=True)
+        result = compose_thumbnail(bg, prompt_data['frase_curta'],
+                                   prompt_data.get('cores_dominantes', ''),
+                                   output_path)
+
+        # Salva JSON do prompt para referencia
+        json_path = output_path.rsplit('.', 1)[0] + '_prompt.json'
+        with open(json_path, 'w') as f:
+            json.dump(prompt_data, f, ensure_ascii=False, indent=2)
+
+        print(f'  Thumbnail salva: {result}', flush=True)
+        return result
+
+    except Exception as e:
+        print(f'  Erro no pipeline: {e}', file=sys.stderr)
+        print(f'  Usando fallback local...', flush=True)
+
+        bg = create_gradient_bg()
+        result = compose_thumbnail(bg, title[:30], '', output_path)
+        print(f'  Thumbnail (fallback): {result}', flush=True)
+        return result
+
+
+if __name__ == '__main__':
+    import argparse
+    parser = argparse.ArgumentParser(description='Gera thumbnail para clip YouTube com IA')
+    parser.add_argument('--title', '-t', required=True, help='Titulo do clip')
+    parser.add_argument('--description', '-d', default='', help='Descricao do conteudo')
+    parser.add_argument('--output', '-o', default='thumbnail.jpg', help='Arquivo de saida')
+    parser.add_argument('--model', '-m', default=None, help='Modelo de imagem')
+    args = parser.parse_args()
+
+    if args.model:
+        IMAGE_MODEL = args.model
+
+    generate_thumbnail(args.title, args.description, args.output)

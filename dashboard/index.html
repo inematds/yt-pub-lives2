@@ -61,6 +61,8 @@
     background: var(--green);
     pointer-events: none;
   }
+  #btnSave { background: #10b981; }
+  #btnSave:hover { background: #34d399; }
   button.secondary {
     background: var(--card);
     border: 1px solid var(--border);
@@ -677,6 +679,37 @@
       </div>
     </div>
 
+    <!-- Thumbnails -->
+    <div class="config-section">
+      <h3>Thumbnails</h3>
+      <div class="config-grid" style="grid-template-columns: 1fr 1fr 1fr;">
+        <div class="config-field">
+          <label>Modo Thumbnail</label>
+          <select id="cfgThumbMode">
+            <option value="api">IA (API)</option>
+            <option value="local">Local (frame do video)</option>
+            <option value="none">Sem thumbnail</option>
+          </select>
+        </div>
+        <div class="config-field">
+          <label>API Key Imagem</label>
+          <input type="text" id="cfgThumbApiKey" placeholder="PIRAMYD_API_KEY">
+          <div class="hint">Chave da API para geracao de thumbnails</div>
+        </div>
+        <div class="config-field">
+          <label>Modelo de Imagem</label>
+          <select id="cfgThumbModel">
+            <option value="dreamshaper">dreamshaper</option>
+            <option value="flux2-klein-4b">flux2-klein-4b</option>
+            <option value="lucid-origin">lucid-origin</option>
+            <option value="qwen-image">qwen-image</option>
+            <option value="sdxl-lite">sdxl-lite</option>
+            <option value="z-image-turbo">z-image-turbo</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
     <div style="margin-top: 8px;">
       <button onclick="saveConfig()" id="btnSave">Salvar Configuracoes</button>
     </div>
@@ -1154,6 +1187,11 @@ async function loadConfig() {
   hourState.corte = stringToHours(c.corte_horarios || '06:00,18:00');
   buildHourPicker('corte');
 
+  // Thumbnails
+  if (c.thumb_mode) document.getElementById('cfgThumbMode').value = c.thumb_mode;
+  if (c.thumb_api_key) document.getElementById('cfgThumbApiKey').value = c.thumb_api_key;
+  if (c.thumb_model) document.getElementById('cfgThumbModel').value = c.thumb_model;
+
   // Pipeline state
   cortesPaused = c.pipeline_cortes_paused === 'true';
   pubPaused = c.pipeline_pub_paused === 'true';
@@ -1171,7 +1209,10 @@ async function saveConfig() {
     corte_auto: document.getElementById('cfgCorteAuto').value,
     corte_horarios: hoursToString('corte'),
     corte_max_por_dia: document.getElementById('cfgCorteMax').value,
-    pub_max_por_vez: document.getElementById('cfgPubMax').value
+    pub_max_por_vez: document.getElementById('cfgPubMax').value,
+    thumb_mode: document.getElementById('cfgThumbMode').value,
+    thumb_api_key: document.getElementById('cfgThumbApiKey').value,
+    thumb_model: document.getElementById('cfgThumbModel').value
   };
 
   try {
@@ -1186,6 +1227,7 @@ async function saveConfig() {
     setTimeout(() => {
       btn.innerHTML = 'Salvar Configuracoes';
       btn.className = '';
+      btn.style.background = '';
       btn.disabled = false;
     }, 2000);
   } catch (e) {
