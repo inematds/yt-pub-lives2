@@ -338,6 +338,18 @@ def main():
     log(f'  Lives: {LIVES_DIR}')
     log(f'  Config: {CONFIG_DIR}')
 
+    # Roda cortes uma vez ao iniciar
+    try:
+        config = load_config()
+        cortes_paused = config.get('pipeline_cortes_paused', 'false') == 'true'
+        if not cortes_paused:
+            log('==> Corte inicial ao startar')
+            process_cortes(config)
+        else:
+            log('==> Cortes pausados, pulando corte inicial')
+    except Exception as e:
+        log(f'ERRO no corte inicial: {e}')
+
     executed_this_hour = {'cortes': None, 'pub': None}
 
     while True:
