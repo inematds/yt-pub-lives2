@@ -33,10 +33,23 @@ PIRAMYD_URL = 'https://api.piramyd.cloud/v1'
 IMAGE_MODEL = os.environ.get('THUMB_MODEL', 'flux2-klein-4b')
 CHAT_MODEL = 'claude-sonnet-4.5'
 
-BRAND = 'INEMA TDS'
+BRAND = os.environ.get('THUMB_BRAND', 'INEMA TDS')
 WIDTH = 1280
 HEIGHT = 720
 FONT_PATH = '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf'
+
+# Visual config from environment (overridable via dashboard)
+THUMB_FONT_SIZE = int(os.environ.get('THUMB_FONT_SIZE', '78'))
+THUMB_TEXT_COLOR = os.environ.get('THUMB_TEXT_COLOR', '#FFFFFF')
+THUMB_ACCENT_COLOR = os.environ.get('THUMB_ACCENT_COLOR', '#00D4FF')
+THUMB_BRAND_COLOR = os.environ.get('THUMB_BRAND_COLOR', '#6366F1')
+THUMB_TEXT_POSITION = os.environ.get('THUMB_TEXT_POSITION', 'top-left')
+
+
+def hex_to_rgb(hex_color):
+    """Convert hex color (#RRGGBB) to RGB tuple."""
+    hex_color = hex_color.lstrip('#')
+    return tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4))
 
 DEFAULT_SYSTEM_PROMPT = """Voce e especialista na criacao de prompts para geracao de thumbnails de YouTube para o canal INEMA TDS (canal de tecnologia, programacao, IA e automacao).
 
@@ -196,9 +209,11 @@ def wrap_text(text, font, max_width, draw):
 
 def compose_thumbnail(bg, frase_curta, cores_str, output_path):
     """Compoe thumbnail final: imagem + texto overlay."""
-    # Parse accent color from cores string
-    accent_color = (0, 212, 255)  # default cyan
-    brand_color = (99, 102, 241)  # roxo
+    text_color = hex_to_rgb(THUMB_TEXT_COLOR)
+    accent_color = hex_to_rgb(THUMB_ACCENT_COLOR)
+    brand_color = hex_to_rgb(THUMB_BRAND_COLOR)
+    font_size = THUMB_FONT_SIZE
+    position = THUMB_TEXT_POSITION
 
     draw = ImageDraw.Draw(bg)
 
@@ -206,37 +221,59 @@ def compose_thumbnail(bg, frase_curta, cores_str, output_path):
     draw.rectangle([0, 0, 8, HEIGHT], fill=brand_color)
 
     # Frase curta (grande e impactante)
-    font_size = 78
     font = ImageFont.truetype(FONT_PATH, font_size)
-    max_text_width = int(WIDTH * 0.8)  # 80% central (10% margem cada lado)
+    max_text_width = int(WIDTH * 0.8)
 
     lines = wrap_text(frase_curta.upper(), font, max_text_width, draw)
 
     line_height = font_size + 16
     total_height = len(lines) * line_height
-    # Posiciona no terco superior
-    x_start = int(WIDTH * 0.10)  # 10% margem esquerda
-    y_start = int(HEIGHT * 0.08)  # 8% do topo (formato aprovado v5)
 
-    # Sem fundo escuro atras do texto — sombra forte ja garante leitura
+    # Posicao do texto baseada na config
+    positions = {
+        'top-left':      (int(WIDTH * 0.10), int(HEIGHT * 0.08)),
+        'top-center':    (int(WIDTH * 0.10), int(HEIGHT * 0.08)),
+        'top-right':     (int(WIDTH * 0.10), int(HEIGHT * 0.08)),
+        'center':        (int(WIDTH * 0.10), int((HEIGHT - total_height) / 2)),
+        'center-left':   (int(WIDTH * 0.05), int((HEIGHT - total_height) / 2)),
+        'center-right':  (int(WIDTH * 0.10), int((HEIGHT - total_height) / 2)),
+        'bottom-left':   (int(WIDTH * 0.10), int(HEIGHT * 0.65)),
+        'bottom-center': (int(WIDTH * 0.10), int(HEIGHT * 0.65)),
+        'bottom-right':  (int(WIDTH * 0.10), int(HEIGHT * 0.65)),
+    }
+    x_start, y_start = positions.get(position, positions['top-left'])
+
+    # Alinhamento horizontal
+    if 'right' in position:
+        # Calcula largura maxima das linhas para alinhar a direita
+        max_line_w = max(draw.textbbox((0, 0), l, font=font)[2] for l in lines) if lines else 0
+        x_start = WIDTH - max_line_w - int(WIDTH * 0.10)
+    elif 'center' in position and 'left' not in position and 'right' not in position:
+        max_line_w = max(draw.textbbox((0, 0), l, font=font)[2] for l in lines) if lines else 0
+        x_start = int((WIDTH - max_line_w) / 2)
+
     draw = ImageDraw.Draw(bg)
 
-    # Texto com outline/sombra forte (sem fundo escuro)
+    # Texto com outline/sombra forte
     for i, line in enumerate(lines):
         y = y_start + i * line_height
-        # Outline preto em todas as direcoes
+        lx = x_start
+        if 'center' in position and 'left' not in position and 'right' not in position:
+            lw = draw.textbbox((0, 0), line, font=font)[2]
+            max_line_w = max(draw.textbbox((0, 0), l, font=font)[2] for l in lines)
+            lx = int((WIDTH - lw) / 2)
+        # Outline preto
         for dx in range(-3, 4):
             for dy in range(-3, 4):
                 if dx != 0 or dy != 0:
-                    draw.text((x_start + dx, y + dy), line, font=font, fill=(0, 0, 0))
-        # Texto branco
-        draw.text((x_start, y), line, font=font, fill=(255, 255, 255))
+                    draw.text((lx + dx, y + dy), line, font=font, fill=(0, 0, 0))
+        draw.text((lx, y), line, font=font, fill=text_color)
 
-    # Linha accent ciano abaixo do texto
+    # Linha accent abaixo do texto
     accent_y = y_start + total_height + 8
     draw.rectangle([x_start, accent_y, x_start + 250, accent_y + 5], fill=accent_color)
 
-    # Brand pill no canto inferior esquerdo
+    # Brand pill no canto inferior direito
     brand_font = ImageFont.truetype(FONT_PATH, 26)
     bbox = draw.textbbox((0, 0), BRAND, font=brand_font)
     brand_w = bbox[2] - bbox[0]

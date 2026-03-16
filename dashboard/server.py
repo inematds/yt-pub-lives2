@@ -11,6 +11,7 @@ import base64
 import urllib.request
 import urllib.parse
 from http.server import HTTPServer, SimpleHTTPRequestHandler
+from socketserver import ThreadingMixIn
 from pathlib import Path
 
 # Config
@@ -176,6 +177,8 @@ class DashboardHandler(SimpleHTTPRequestHandler):
         elif path == '/api/transcript':
             video_id = qs.get('id', [None])[0]
             self.handle_api_transcript(video_id)
+        elif path == '/api/thumbs/pending':
+            self.handle_thumbs_pending()
         elif path.startswith('/clips/'):
             self.handle_serve_clip(path)
         elif path == '/':
@@ -208,6 +211,14 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             self.handle_clip_pause(data)
         elif post_path == '/api/prompts':
             self.handle_api_prompts_save(data)
+        elif post_path == '/api/cleanup/clips':
+            self.handle_cleanup_clips(data)
+        elif post_path == '/api/cleanup/sources':
+            self.handle_cleanup_sources(data)
+        elif post_path == '/api/live/delete':
+            self.handle_live_delete(data)
+        elif post_path == '/api/thumbs/upload':
+            self.handle_thumbs_upload(data)
         else:
             self.send_json(404, {'error': 'not found'})
 
@@ -403,7 +414,7 @@ class DashboardHandler(SimpleHTTPRequestHandler):
         self.send_json(200, result)
 
     def handle_api_config(self):
-        result = sheets_get('CONFIG!A1:B20')
+        result = sheets_get('CONFIG!A1:B50')
         rows = result.get('values', [])
         config = {}
         for row in rows[1:]:  # skip header
@@ -414,7 +425,7 @@ class DashboardHandler(SimpleHTTPRequestHandler):
     def handle_api_prompts_get(self):
         config_dir = os.environ.get('GWS_CONFIG_DIR', os.path.expanduser('~/.config/gws'))
         prompts = {}
-        for name in ('prompt_cortes', 'prompt_thumb'):
+        for name in ('prompt_cortes', 'prompt_pub', 'prompt_thumb'):
             path = os.path.join(config_dir, f'{name}.txt')
             if os.path.exists(path):
                 with open(path) as f:
@@ -426,7 +437,7 @@ class DashboardHandler(SimpleHTTPRequestHandler):
     def handle_api_prompts_save(self, data):
         config_dir = os.environ.get('GWS_CONFIG_DIR', os.path.expanduser('~/.config/gws'))
         saved = []
-        for name in ('prompt_cortes', 'prompt_thumb'):
+        for name in ('prompt_cortes', 'prompt_pub', 'prompt_thumb'):
             if name in data:
                 path = os.path.join(config_dir, f'{name}.txt')
                 with open(path, 'w') as f:
@@ -549,7 +560,7 @@ class DashboardHandler(SimpleHTTPRequestHandler):
     def handle_update_config(self, data):
         """Update config values."""
         # Read current config
-        result = sheets_get('CONFIG!A1:B20')
+        result = sheets_get('CONFIG!A1:B50')
         rows = result.get('values', [])
 
         # Update values
@@ -653,7 +664,7 @@ class DashboardHandler(SimpleHTTPRequestHandler):
         key = 'pipeline_cortes_paused' if target == 'cortes' else 'pipeline_pub_paused'
 
         # Read current config
-        result = sheets_get('CONFIG!A1:B20')
+        result = sheets_get('CONFIG!A1:B50')
         rows = result.get('values', [])
 
         current = 'false'
@@ -748,6 +759,199 @@ class DashboardHandler(SimpleHTTPRequestHandler):
         else:
             self.send_json(404, {'error': 'clip not found in manifest'})
 
+    def handle_cleanup_clips(self, data):
+        """Deleta arquivos mp4 dos clips do disco. Mantem manifest e planilha."""
+        video_id = data.get('video_id', '')  # opcional: limpar só uma live
+        lives_dir = os.environ.get('LIVES_DIR', os.path.expanduser('~/projetos/gws/lives'))
+        deleted = 0
+        freed = 0
+
+        if video_id:
+            dirs = [os.path.join(lives_dir, video_id)]
+        else:
+            dirs = [os.path.join(lives_dir, d) for d in os.listdir(lives_dir)
+                    if os.path.isdir(os.path.join(lives_dir, d))]
+
+        for job_dir in dirs:
+            clips_dir = os.path.join(job_dir, 'clips')
+            if not os.path.isdir(clips_dir):
+                continue
+            for f in os.listdir(clips_dir):
+                if f.endswith('.mp4'):
+                    fpath = os.path.join(clips_dir, f)
+                    freed += os.path.getsize(fpath)
+                    os.remove(fpath)
+                    deleted += 1
+
+        freed_mb = freed / 1024 / 1024
+        self.send_json(200, {'ok': True, 'deleted': deleted, 'freed_mb': round(freed_mb, 1)})
+
+    def handle_cleanup_sources(self, data):
+        """Deleta arquivos source.mp4 (videos originais) do disco. Mantem clips e manifest."""
+        video_id = data.get('video_id', '')  # opcional: limpar só uma live
+        lives_dir = os.environ.get('LIVES_DIR', os.path.expanduser('~/projetos/gws/lives'))
+        deleted = 0
+        freed = 0
+
+        if video_id:
+            dirs = [os.path.join(lives_dir, video_id)]
+        else:
+            dirs = [os.path.join(lives_dir, d) for d in os.listdir(lives_dir)
+                    if os.path.isdir(os.path.join(lives_dir, d))]
+
+        for job_dir in dirs:
+            source = os.path.join(job_dir, 'source.mp4')
+            if os.path.exists(source):
+                freed += os.path.getsize(source)
+                os.remove(source)
+                deleted += 1
+
+        freed_mb = freed / 1024 / 1024
+        self.send_json(200, {'ok': True, 'deleted': deleted, 'freed_mb': round(freed_mb, 1)})
+
+    def handle_live_delete(self, data):
+        """Deleta live: remove arquivos do disco E remove da planilha LIVES."""
+        import shutil
+        video_id = data.get('video_id', '')
+        if not video_id:
+            self.send_json(400, {'error': 'video_id required'})
+            return
+
+        # Remove da planilha
+        result = sheets_get('LIVES!A1:L1000')
+        rows = result.get('values', [])
+        if len(rows) < 2:
+            self.send_json(404, {'error': 'no lives'})
+            return
+
+        headers = rows[0]
+        vid_col = headers.index('video_id') if 'video_id' in headers else 0
+        found_row = None
+        for i, row in enumerate(rows[1:], 2):
+            vid = row[vid_col] if vid_col < len(row) else ''
+            if vid == video_id:
+                found_row = i
+                break
+
+        if not found_row:
+            self.send_json(404, {'error': f'{video_id} not found'})
+            return
+
+        # Delete row from sheet
+        token = get_access_token()
+        delete_body = json.dumps({
+            'requests': [{
+                'deleteDimension': {
+                    'range': {
+                        'sheetId': 0,
+                        'dimension': 'ROWS',
+                        'startIndex': found_row - 1,
+                        'endIndex': found_row
+                    }
+                }
+            }]
+        }).encode()
+        req = urllib.request.Request(
+            f'https://sheets.googleapis.com/v4/spreadsheets/{SPREADSHEET_ID}:batchUpdate',
+            data=delete_body, method='POST')
+        req.add_header('Authorization', f'Bearer {token}')
+        req.add_header('Content-Type', 'application/json')
+        try:
+            urllib.request.urlopen(req)
+        except Exception as e:
+            self.send_json(500, {'error': f'Erro ao deletar da planilha: {e}'})
+            return
+
+        # Remove arquivos do disco
+        lives_dir = os.environ.get('LIVES_DIR', os.path.expanduser('~/projetos/gws/lives'))
+        job_dir = os.path.join(lives_dir, video_id)
+        freed = 0
+        if os.path.exists(job_dir):
+            for root, dirs, files in os.walk(job_dir):
+                for f in files:
+                    freed += os.path.getsize(os.path.join(root, f))
+            shutil.rmtree(job_dir)
+
+        freed_mb = freed / 1024 / 1024
+        self.send_json(200, {'ok': True, 'video_id': video_id, 'freed_mb': round(freed_mb, 1)})
+
+
+    def handle_thumbs_pending(self):
+        """List pending thumbnails."""
+        pending_file = os.path.join(os.path.dirname(__file__), '..', 'lives', 'pending_thumbs.json')
+        thumb_dir = os.path.join(os.path.dirname(__file__), '..', 'lives', 'thumbs')
+        if not os.path.exists(pending_file):
+            self.send_json(200, {'pending': [], 'total': 0})
+            return
+        with open(pending_file) as f:
+            clips = json.load(f)
+        # Enrich with has_image flag
+        for clip in clips:
+            thumb_path = os.path.join(thumb_dir, f"{clip['id']}.jpg")
+            clip['has_image'] = os.path.exists(thumb_path)
+        self.send_json(200, {'pending': clips, 'total': len(clips)})
+
+    def handle_thumbs_upload(self, data):
+        """Upload pending thumbnails to YouTube."""
+        pending_file = os.path.join(os.path.dirname(__file__), '..', 'lives', 'pending_thumbs.json')
+        thumb_dir = os.path.join(os.path.dirname(__file__), '..', 'lives', 'thumbs')
+
+        if not os.path.exists(pending_file):
+            self.send_json(200, {'ok': True, 'uploaded': 0, 'errors': 0, 'remaining': 0})
+            return
+
+        with open(pending_file) as f:
+            clips = json.load(f)
+
+        if not clips:
+            self.send_json(200, {'ok': True, 'uploaded': 0, 'errors': 0, 'remaining': 0})
+            return
+
+        # Import upload function from scheduler
+        sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
+        from scheduler import upload_thumbnail
+
+        uploaded = 0
+        errors = 0
+        remaining = []
+        error_details = []
+
+        for clip in clips:
+            vid = clip['id']
+            thumb_path = os.path.join(thumb_dir, f'{vid}.jpg')
+
+            if not os.path.exists(thumb_path):
+                remaining.append(clip)
+                continue
+
+            try:
+                upload_thumbnail(vid, thumb_path)
+                uploaded += 1
+            except Exception as e:
+                err_msg = str(e)
+                if 'quota' in err_msg.lower():
+                    remaining.append(clip)
+                    # Add remaining clips that haven't been processed
+                    idx = clips.index(clip)
+                    remaining.extend(clips[idx + 1:])
+                    error_details.append('Quota excedida - parou')
+                    break
+                errors += 1
+                error_details.append(f'{clip.get("title", vid)[:40]}: {err_msg[:60]}')
+                remaining.append(clip)
+
+        # Update pending file
+        with open(pending_file, 'w') as f:
+            json.dump(remaining, f, indent=2, ensure_ascii=False)
+
+        self.send_json(200, {
+            'ok': True,
+            'uploaded': uploaded,
+            'errors': errors,
+            'remaining': len(remaining),
+            'error_details': error_details
+        })
+
 
 def parse_duration_minutes(iso_duration):
     """Parse ISO 8601 duration like PT1H30M15S to minutes."""
@@ -782,7 +986,10 @@ if __name__ == '__main__':
     except Exception as e:
         print(f'ERRO ao iniciar scheduler: {e}', file=sys.stderr)
 
-    server = HTTPServer(('0.0.0.0', port), DashboardHandler)
+    class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
+        daemon_threads = True
+
+    server = ThreadedHTTPServer(('0.0.0.0', port), DashboardHandler)
     print(f'Dashboard rodando em http://localhost:{port}')
     try:
         server.serve_forever()

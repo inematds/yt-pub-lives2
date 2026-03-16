@@ -39,12 +39,14 @@ def log(msg):
     print(f'[{ts}] {msg}', file=sys.stderr, flush=True)
 
 
-def update_status(state, detail='', video_id='', step=''):
+def update_status(state, detail='', video_id='', step='', clip_id='', clip_title=''):
     """Escreve status atual do scheduler em JSON para o dashboard ler."""
     data = {
         'state': state,        # idle | cortando | publicando | erro
         'detail': detail,
         'video_id': video_id,
+        'clip_id': clip_id,
+        'clip_title': clip_title,
         'step': step,          # etapa atual: transcricao | analise | download | corte | thumbnail | upload
         'updated_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     }
@@ -221,6 +223,65 @@ def run_corte(video_id, config=None):
         return False
 
 
+def refine_pub_with_ai(title, description, config):
+    """Usa IA para refinar titulo e descricao antes de publicar."""
+    prompt_file = os.path.join(CONFIG_DIR, 'prompt_pub.txt')
+    if not os.path.exists(prompt_file):
+        return title, description
+
+    with open(prompt_file) as f:
+        system_prompt = f.read().strip()
+    if not system_prompt:
+        return title, description
+
+    # Determine API endpoint and key
+    api_key = config.get('thumb_api_key', '') or os.environ.get('PIRAMYD_API_KEY', '')
+    if not api_key:
+        log('  Sem API key para refinar publicacao, usando titulo/descricao originais')
+        return title, description
+
+    api_url = 'https://api.piramyd.cloud/v1/chat/completions'
+    ai_model = config.get('ai_model', '') or 'claude-sonnet-4.5'
+
+    user_msg = f'Titulo original: "{title}"\nDescricao original: "{description}"'
+
+    payload = {
+        'model': ai_model,
+        'messages': [
+            {'role': 'system', 'content': system_prompt},
+            {'role': 'user', 'content': user_msg}
+        ],
+        'temperature': 0.7,
+        'max_tokens': 500
+    }
+
+    try:
+        log(f'  Refinando titulo/descricao com IA ({ai_model})...')
+        body = json.dumps(payload).encode()
+        req = urllib.request.Request(api_url, data=body)
+        req.add_header('Content-Type', 'application/json')
+        req.add_header('Authorization', f'Bearer {api_key}')
+
+        resp = urllib.request.urlopen(req, timeout=60)
+        result = json.loads(resp.read())
+        content = result['choices'][0]['message']['content']
+
+        import re
+        json_match = re.search(r'\{[\s\S]*\}', content)
+        if json_match:
+            refined = json.loads(json_match.group())
+            new_title = refined.get('title', title)
+            new_desc = refined.get('description', description)
+            log(f'  Titulo refinado: {new_title[:60]}')
+            return new_title, new_desc
+        else:
+            log(f'  IA nao retornou JSON valido, usando originais')
+            return title, description
+    except Exception as e:
+        log(f'  Erro ao refinar com IA: {e}, usando originais')
+        return title, description
+
+
 def run_publicacao(video_id, clip_file, title, description, tags, privacy):
     """Executa yt-publish para um clip."""
     log(f'  Publicando: {title[:60]}')
@@ -286,6 +347,23 @@ def upload_thumbnail(video_id, thumb_path):
     return result
 
 
+def _add_pending_thumb(video_id, title):
+    """Add a thumbnail to the pending list for later upload."""
+    pending_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'lives', 'pending_thumbs.json')
+    pending = []
+    if os.path.exists(pending_file):
+        try:
+            with open(pending_file) as f:
+                pending = json.load(f)
+        except Exception:
+            pending = []
+    # Avoid duplicates
+    if not any(p['id'] == video_id for p in pending):
+        pending.append({'id': video_id, 'title': title})
+        with open(pending_file, 'w') as f:
+            json.dump(pending, f, indent=2, ensure_ascii=False)
+
+
 def handle_thumbnail(video_id, title, description, config):
     """Generate and upload thumbnail based on config thumb_mode."""
     thumb_mode = config.get('thumb_mode', 'none')
@@ -296,19 +374,26 @@ def handle_thumbnail(video_id, title, description, config):
 
     try:
         if thumb_mode == 'api':
-            # Set API key and model from config before importing
+            # Set API key, model and visual config before importing
             api_key = config.get('thumb_api_key', '')
             model = config.get('thumb_model', 'dreamshaper')
             if api_key:
                 os.environ['PIRAMYD_API_KEY'] = api_key
             os.environ['THUMB_MODEL'] = model
+            # Visual settings
+            for key in ('thumb_font_size', 'thumb_text_color', 'thumb_accent_color',
+                        'thumb_brand_color', 'thumb_text_position', 'thumb_brand'):
+                val = config.get(key, '')
+                if val:
+                    os.environ[key.upper()] = val
 
             # Import generate_thumbnail from scripts/yt-thumbnail
-            import importlib.util
+            import types
             script_path = os.path.join(SCRIPTS_DIR, 'yt-thumbnail')
-            spec = importlib.util.spec_from_file_location('yt_thumbnail', script_path)
-            yt_thumb = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(yt_thumb)
+            yt_thumb = types.ModuleType('yt_thumbnail')
+            yt_thumb.__file__ = script_path
+            with open(script_path) as _f:
+                exec(compile(_f.read(), script_path, 'exec'), yt_thumb.__dict__)
 
             log(f'  Generating API thumbnail for {video_id} (model: {model})')
             yt_thumb.generate_thumbnail(title, description, thumb_path)
@@ -363,9 +448,20 @@ def handle_thumbnail(video_id, title, description, config):
             log(f'  Unknown thumb_mode: {thumb_mode}, skipping')
             return
 
-        # Upload to YouTube
+        # Save a copy to lives/thumbs/ for future reference
         if os.path.exists(thumb_path):
-            upload_thumbnail(video_id, thumb_path)
+            thumbs_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'lives', 'thumbs')
+            os.makedirs(thumbs_dir, exist_ok=True)
+            import shutil
+            saved_path = os.path.join(thumbs_dir, f'{video_id}.jpg')
+            shutil.copy2(thumb_path, saved_path)
+
+            # Upload to YouTube
+            try:
+                upload_thumbnail(video_id, thumb_path)
+            except Exception as upload_err:
+                log(f'  Thumbnail upload failed, saved as pending: {upload_err}')
+                _add_pending_thumb(video_id, title)
             # Clean up temp file
             try:
                 os.remove(thumb_path)
@@ -503,17 +599,25 @@ def process_publicacao(config):
                 log(f'  Arquivo nao encontrado: {clip["file"]}')
                 continue
 
+            clip_title = clip['title']
+            clip_desc = clip.get('description', '')
+
+            # Refinar titulo e descricao com IA
+            update_status('publicando', f'Refinando com IA: {clip_title[:50]}', vid, step='refine', clip_title=clip_title[:50])
+            clip_title, clip_desc = refine_pub_with_ai(clip_title, clip_desc, config)
+
+            update_status('publicando', f'Enviando: {clip_title[:50]}', vid, step='upload', clip_title=clip_title[:50])
             new_vid = run_publicacao(
-                vid, clip['file'], clip['title'],
-                clip.get('description', ''), ','.join(clip.get('tags', [])),
+                vid, clip['file'], clip_title,
+                clip_desc, ','.join(clip.get('tags', [])),
                 privacy
             )
 
             if new_vid:
                 # Generate and upload thumbnail
-                update_status('publicando', 'Gerando thumbnail...', new_vid, step='thumbnail')
+                update_status('publicando', f'Gerando thumbnail...', vid, step='thumbnail', clip_id=new_vid, clip_title=clip_title[:50])
                 handle_thumbnail(
-                    new_vid, clip['title'],
+                    new_vid, clip_title,
                     clip.get('description', ''), config
                 )
 
@@ -558,6 +662,7 @@ def process_publicacao(config):
 
         if count > 0:
             log(f'  {count} clips publicados para {vid}')
+            update_status('idle', f'{count} clips publicados para {vid}')
             # Only break after actually publishing to avoid quota issues
             break
 

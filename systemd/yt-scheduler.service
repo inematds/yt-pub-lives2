@@ -5,13 +5,13 @@ After=network.target yt-dashboard.service
 [Service]
 Type=simple
 User=nmaldaner
-WorkingDirectory=/home/nmaldaner/projetos/gws
-ExecStart=/usr/bin/python3 /home/nmaldaner/projetos/gws/scheduler.py
+WorkingDirectory=/home/nmaldaner/projetos/yt-pub-lives
+ExecStart=/usr/bin/python3 /home/nmaldaner/projetos/yt-pub-lives/scheduler.py
 Restart=always
 RestartSec=10
-Environment=PATH=/home/nmaldaner/.deno/bin:/usr/bin:/home/nmaldaner/.local/bin:/home/nmaldaner/.npm-global/bin:/home/nmaldaner/projetos/gws/scripts
+Environment=PATH=/home/nmaldaner/.deno/bin:/usr/bin:/home/nmaldaner/.local/bin:/home/nmaldaner/.npm-global/bin:/home/nmaldaner/projetos/yt-pub-lives/scripts
 Environment=GWS_CONFIG_DIR=/home/nmaldaner/.config/gws
-Environment=LIVES_DIR=/home/nmaldaner/projetos/gws/lives
+Environment=LIVES_DIR=/home/nmaldaner/projetos/yt-pub-lives/lives
 Environment=PYTHONUNBUFFERED=1
 
 [Install]

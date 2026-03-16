@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>yt-pub-lives v2.1.0 - Lives & Clips Dashboard</title>
+<title>yt-pub-lives v2.3.1 - Lives & Clips Dashboard</title>
 <style>
   :root {
     --bg: #0f1117;
@@ -605,7 +605,7 @@
 
 <div class="container">
   <header>
-    <h1><span>GWS</span> Lives & Clips <small style="font-size:0.5em;color:var(--muted)">- yt-pub-lives v2.1.0</small></h1>
+    <h1><span>GWS</span> Lives & Clips <small style="font-size:0.5em;color:var(--muted)">- yt-pub-lives v2.3.1</small></h1>
     <div class="header-actions">
       <button id="btnCortes" onclick="togglePipeline('cortes')" class="danger small">Parar Cortes</button>
       <button id="btnPub" onclick="togglePipeline('pub')" class="danger small">Parar Publicacao</button>
@@ -778,6 +778,64 @@
           </select>
         </div>
       </div>
+      <div class="config-grid" style="grid-template-columns: 1fr 1fr 1fr; margin-top:12px;">
+        <div class="config-field">
+          <label>Posicao do Titulo</label>
+          <select id="cfgThumbTextPosition">
+            <option value="top-left">Topo Esquerda</option>
+            <option value="top-center">Topo Centro</option>
+            <option value="top-right">Topo Direita</option>
+            <option value="center-left">Centro Esquerda</option>
+            <option value="center">Centro</option>
+            <option value="center-right">Centro Direita</option>
+            <option value="bottom-left">Base Esquerda</option>
+            <option value="bottom-center">Base Centro</option>
+            <option value="bottom-right">Base Direita</option>
+          </select>
+        </div>
+        <div class="config-field">
+          <label>Tamanho da Fonte</label>
+          <input type="number" id="cfgThumbFontSize" value="78" min="30" max="120" step="2">
+        </div>
+        <div class="config-field">
+          <label>Texto da Marca</label>
+          <input type="text" id="cfgThumbBrand" value="INEMA TDS" placeholder="INEMA TDS">
+        </div>
+      </div>
+      <div class="config-grid" style="grid-template-columns: 1fr 1fr 1fr; margin-top:8px;">
+        <div class="config-field">
+          <label>Cor do Titulo</label>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <input type="color" id="cfgThumbTextColor" value="#FFFFFF" style="width:40px;height:32px;border:1px solid var(--border);border-radius:4px;background:var(--bg);cursor:pointer;">
+            <input type="text" id="cfgThumbTextColorHex" value="#FFFFFF" style="width:90px;font-family:monospace;font-size:0.8rem;" oninput="document.getElementById('cfgThumbTextColor').value=this.value">
+          </div>
+        </div>
+        <div class="config-field">
+          <label>Cor do Accent</label>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <input type="color" id="cfgThumbAccentColor" value="#00D4FF" style="width:40px;height:32px;border:1px solid var(--border);border-radius:4px;background:var(--bg);cursor:pointer;">
+            <input type="text" id="cfgThumbAccentColorHex" value="#00D4FF" style="width:90px;font-family:monospace;font-size:0.8rem;" oninput="document.getElementById('cfgThumbAccentColor').value=this.value">
+          </div>
+        </div>
+        <div class="config-field">
+          <label>Cor da Marca</label>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <input type="color" id="cfgThumbBrandColor" value="#6366F1" style="width:40px;height:32px;border:1px solid var(--border);border-radius:4px;background:var(--bg);cursor:pointer;">
+            <input type="text" id="cfgThumbBrandColorHex" value="#6366F1" style="width:90px;font-family:monospace;font-size:0.8rem;" oninput="document.getElementById('cfgThumbBrandColor').value=this.value">
+          </div>
+        </div>
+      </div>
+      <div style="margin-top:12px;padding:12px;background:var(--bg);border:1px solid var(--border);border-radius:6px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+          <label style="font-weight:600;">Thumbnails Pendentes</label>
+          <div style="display:flex;gap:8px;">
+            <button class="small secondary" onclick="loadPendingThumbs()">Atualizar</button>
+            <button class="small" id="btnUploadThumbs" onclick="uploadPendingThumbs()" style="background:var(--green);">Enviar para YouTube</button>
+          </div>
+        </div>
+        <div id="thumbsPendingInfo" style="color:var(--muted);font-size:0.85em;">Clique em Atualizar para verificar</div>
+        <div id="thumbsPendingList" style="max-height:200px;overflow-y:auto;margin-top:8px;display:none;"></div>
+      </div>
     </div>
 
     <!-- Prompts -->
@@ -788,9 +846,31 @@
         <textarea id="cfgPromptCortes" rows="12" style="width:100%;font-family:monospace;font-size:0.8rem;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:8px;resize:vertical"></textarea>
       </div>
       <div class="config-field" style="margin-top:12px">
+        <label>Prompt Publicacao (refina titulo e descricao antes de publicar no YouTube)</label>
+        <textarea id="cfgPromptPub" rows="10" style="width:100%;font-family:monospace;font-size:0.8rem;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:8px;resize:vertical"></textarea>
+      </div>
+      <div class="config-field" style="margin-top:12px">
         <label>Prompt Thumbnail (LLM gera prompt estruturado para o gerador de imagem)</label>
         <textarea id="cfgPromptThumb" rows="12" style="width:100%;font-family:monospace;font-size:0.8rem;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:8px;resize:vertical"></textarea>
       </div>
+    </div>
+
+    <!-- Limpeza de Disco -->
+    <div class="config-section">
+      <h3>Limpeza de Disco</h3>
+      <div class="config-grid" style="grid-template-columns: 1fr 1fr;">
+        <div class="config-field">
+          <label>Clips (mp4 cortados)</label>
+          <button onclick="cleanupClips()" id="btnCleanClips" style="background:#ef4444;color:#fff;border:none;padding:8px 16px;border-radius:6px;cursor:pointer;">Limpar Clips</button>
+          <div class="hint">Remove todos os mp4 da pasta clips/. Mantem manifest e planilha.</div>
+        </div>
+        <div class="config-field">
+          <label>Videos Originais (source.mp4)</label>
+          <button onclick="cleanupSources()" id="btnCleanSources" style="background:#ef4444;color:#fff;border:none;padding:8px 16px;border-radius:6px;cursor:pointer;">Limpar Originais</button>
+          <div class="hint">Remove os source.mp4 (videos completos baixados). Mantem clips.</div>
+        </div>
+      </div>
+      <div id="cleanupResult" style="margin-top:8px;color:var(--muted);font-size:0.85em;"></div>
     </div>
 
     <div style="margin-top: 8px;">
@@ -839,10 +919,11 @@
             <th>Transcricao</th>
             <th>Clips</th>
             <th>Publicados</th>
+            <th></th>
           </tr>
         </thead>
         <tbody id="livesBody">
-          <tr><td colspan="8" class="empty">Carregando...</td></tr>
+          <tr><td colspan="9" class="empty">Carregando...</td></tr>
         </tbody>
       </table>
       <div class="pagination" id="livesPagination"></div>
@@ -968,7 +1049,9 @@ function showTab(name, btn) {
 }
 
 function toggleConfig() {
-  document.getElementById('configPanel').classList.toggle('visible');
+  const panel = document.getElementById('configPanel');
+  panel.classList.toggle('visible');
+  if (panel.classList.contains('visible')) loadPendingThumbs();
 }
 
 // --- Hour Picker ---
@@ -1258,7 +1341,7 @@ function filterLives() {
   renderPagination('livesPagination', livesPage, totalPages, p => { livesPage = p; filterLives(); });
 
   if (paged.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="8" class="empty">Nenhuma live encontrada.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="9" class="empty">Nenhuma live encontrada.</td></tr>';
     return;
   }
 
@@ -1286,7 +1369,8 @@ function filterLives() {
       <td>${cortesBadge}${reprocessBtn}</td>
       <td>${transcBadge}</td>
       <td style="cursor:pointer" onclick="goToClips('${l.video_id}')">${l.qtd_clips || '0'}</td>
-      <td style="cursor:pointer" onclick="goToClips('${l.video_id}')">${l.clips_publicados || '0'}</td>
+      <td style="cursor:pointer" onclick="goToClips('${l.video_id}')"><span style="color:${parseInt(l.clips_publicados||0) > 0 ? (parseInt(l.clips_publicados||0) >= parseInt(l.qtd_clips||0) ? '#10b981' : '#f59e0b') : 'var(--muted)'}">${l.clips_publicados || '0'}</span></td>
+      <td><span style="cursor:pointer;color:#ef4444;font-size:1.1em" onclick="deleteLiveFiles('${l.video_id}')" title="Deletar arquivos do disco">&#128465;</span></td>
     </tr>`;
   }).join('');
 }
@@ -1456,6 +1540,21 @@ async function loadConfig() {
   // Thumbnails
   if (c.thumb_mode) document.getElementById('cfgThumbMode').value = c.thumb_mode;
   if (c.thumb_model) document.getElementById('cfgThumbModel').value = c.thumb_model;
+  if (c.thumb_text_position) document.getElementById('cfgThumbTextPosition').value = c.thumb_text_position;
+  if (c.thumb_font_size) document.getElementById('cfgThumbFontSize').value = c.thumb_font_size;
+  if (c.thumb_brand) document.getElementById('cfgThumbBrand').value = c.thumb_brand;
+  if (c.thumb_text_color) {
+    document.getElementById('cfgThumbTextColor').value = c.thumb_text_color;
+    document.getElementById('cfgThumbTextColorHex').value = c.thumb_text_color;
+  }
+  if (c.thumb_accent_color) {
+    document.getElementById('cfgThumbAccentColor').value = c.thumb_accent_color;
+    document.getElementById('cfgThumbAccentColorHex').value = c.thumb_accent_color;
+  }
+  if (c.thumb_brand_color) {
+    document.getElementById('cfgThumbBrandColor').value = c.thumb_brand_color;
+    document.getElementById('cfgThumbBrandColorHex').value = c.thumb_brand_color;
+  }
 
   // Pipeline state
   cortesPaused = c.pipeline_cortes_paused === 'true';
@@ -1467,8 +1566,39 @@ async function loadConfig() {
     const pData = await fetchJson('/api/prompts');
     const p = pData.prompts || {};
     document.getElementById('cfgPromptCortes').value = p.prompt_cortes || '';
+    document.getElementById('cfgPromptPub').value = p.prompt_pub || '';
     document.getElementById('cfgPromptThumb').value = p.prompt_thumb || '';
   } catch (e) {}
+}
+
+async function deleteLiveFiles(videoId) {
+  if (!confirm(`Deletar ${videoId}?\nRemove da lista E deleta arquivos do disco.`)) return;
+  try {
+    const res = await fetchJson('/api/live/delete', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({video_id: videoId})});
+    loadLives();
+  } catch(e) { alert('Erro: ' + e.message); }
+}
+
+async function cleanupClips() {
+  if (!confirm('Tem certeza? Vai deletar TODOS os mp4 de clips do disco.')) return;
+  const btn = document.getElementById('btnCleanClips');
+  btn.disabled = true; btn.textContent = 'Limpando...';
+  try {
+    const res = await fetchJson('/api/cleanup/clips', {method:'POST', headers:{'Content-Type':'application/json'}, body:'{}'});
+    document.getElementById('cleanupResult').textContent = `Clips: ${res.deleted} arquivos removidos, ${res.freed_mb} MB liberados`;
+  } catch(e) { document.getElementById('cleanupResult').textContent = 'Erro: ' + e.message; }
+  btn.disabled = false; btn.textContent = 'Limpar Clips';
+}
+
+async function cleanupSources() {
+  if (!confirm('Tem certeza? Vai deletar TODOS os source.mp4 (videos originais) do disco.')) return;
+  const btn = document.getElementById('btnCleanSources');
+  btn.disabled = true; btn.textContent = 'Limpando...';
+  try {
+    const res = await fetchJson('/api/cleanup/sources', {method:'POST', headers:{'Content-Type':'application/json'}, body:'{}'});
+    document.getElementById('cleanupResult').textContent = `Originais: ${res.deleted} arquivos removidos, ${res.freed_mb} MB liberados`;
+  } catch(e) { document.getElementById('cleanupResult').textContent = 'Erro: ' + e.message; }
+  btn.disabled = false; btn.textContent = 'Limpar Originais';
 }
 
 async function saveConfig() {
@@ -1489,7 +1619,13 @@ async function saveConfig() {
     thumb_api_key: document.getElementById('cfgThumbApiKey').value,
     openrouter_api_key: document.getElementById('cfgOpenrouterApiKey').value,
     thumb_mode: document.getElementById('cfgThumbMode').value,
-    thumb_model: document.getElementById('cfgThumbModel').value
+    thumb_model: document.getElementById('cfgThumbModel').value,
+    thumb_text_position: document.getElementById('cfgThumbTextPosition').value,
+    thumb_font_size: document.getElementById('cfgThumbFontSize').value,
+    thumb_brand: document.getElementById('cfgThumbBrand').value,
+    thumb_text_color: document.getElementById('cfgThumbTextColor').value,
+    thumb_accent_color: document.getElementById('cfgThumbAccentColor').value,
+    thumb_brand_color: document.getElementById('cfgThumbBrandColor').value
   };
 
   try {
@@ -1505,6 +1641,7 @@ async function saveConfig() {
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({
         prompt_cortes: document.getElementById('cfgPromptCortes').value,
+        prompt_pub: document.getElementById('cfgPromptPub').value,
         prompt_thumb: document.getElementById('cfgPromptThumb').value
       })
     });
@@ -1616,13 +1753,23 @@ async function loadSchedulerStatus() {
     const stepIcon = data.step && stepIcons[data.step] ? stepIcons[data.step] + ' ' : '';
 
     const labels = {
-      idle: 'Aguardando proximo horario',
+      idle: data.detail || 'Aguardando proximo horario',
       cortando: stepIcon + (data.detail || 'Cortando...'),
       publicando: stepIcon + (data.detail || 'Publicando...'),
       erro: '⚠️ ' + (data.detail || 'Erro'),
       offline: 'Scheduler nao iniciado'
     };
-    detail.textContent = labels[data.state] || data.detail || data.state;
+    let statusText = labels[data.state] || data.detail || data.state;
+
+    // Append video/clip IDs when active
+    const ids = [];
+    if (data.video_id) ids.push('live:' + data.video_id);
+    if (data.clip_id) ids.push('clip:' + data.clip_id);
+    if (ids.length && data.state !== 'idle' && data.state !== 'offline') {
+      statusText += '  [' + ids.join(' | ') + ']';
+    }
+
+    detail.textContent = statusText;
     time.textContent = data.updated_at || '';
   } catch (e) {
     document.getElementById('schedulerDot').className = 'scheduler-dot offline';
@@ -1697,6 +1844,74 @@ async function deleteClip(clipId, titulo, btn) {
     btn.disabled = false;
     btn.textContent = 'x';
   }
+}
+
+// --- Thumb color pickers sync ---
+['Text', 'Accent', 'Brand'].forEach(name => {
+  const picker = document.getElementById('cfgThumb' + name + 'Color');
+  const hex = document.getElementById('cfgThumb' + name + 'ColorHex');
+  if (picker && hex) {
+    picker.addEventListener('input', () => { hex.value = picker.value.toUpperCase(); });
+    hex.addEventListener('input', () => { try { picker.value = hex.value; } catch(e) {} });
+  }
+});
+
+// --- Pending Thumbnails ---
+async function loadPendingThumbs() {
+  const info = document.getElementById('thumbsPendingInfo');
+  const list = document.getElementById('thumbsPendingList');
+  info.textContent = 'Verificando...';
+  try {
+    const data = await fetchJson('/api/thumbs/pending');
+    if (data.total === 0) {
+      info.innerHTML = '<span style="color:var(--green)">Nenhuma thumbnail pendente</span>';
+      list.style.display = 'none';
+      document.getElementById('btnUploadThumbs').style.display = 'none';
+    } else {
+      const withImg = data.pending.filter(c => c.has_image).length;
+      const noImg = data.total - withImg;
+      info.innerHTML = `<strong>${data.total}</strong> pendentes (${withImg} com imagem${noImg > 0 ? ', ' + noImg + ' sem imagem' : ''})`;
+      list.style.display = 'block';
+      list.innerHTML = data.pending.map(c =>
+        `<div style="padding:4px 0;border-bottom:1px solid var(--border);font-size:0.8em;display:flex;gap:8px;align-items:center;">` +
+        `<span style="color:${c.has_image ? 'var(--green)' : 'var(--red)'};">${c.has_image ? '✓' : '✗'}</span>` +
+        `<span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${c.title}</span>` +
+        `<a href="https://www.youtube.com/watch?v=${c.id}" target="_blank" style="color:var(--blue);font-size:0.75em;">ver</a>` +
+        `</div>`
+      ).join('');
+      document.getElementById('btnUploadThumbs').style.display = '';
+    }
+  } catch (e) {
+    info.textContent = 'Erro ao carregar: ' + e.message;
+  }
+}
+
+async function uploadPendingThumbs() {
+  const btn = document.getElementById('btnUploadThumbs');
+  const info = document.getElementById('thumbsPendingInfo');
+  btn.disabled = true;
+  btn.textContent = 'Enviando...';
+  info.textContent = 'Enviando thumbnails para o YouTube...';
+  try {
+    const resp = await fetchJson('/api/thumbs/upload', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: '{}'
+    });
+    if (resp.ok) {
+      let msg = `${resp.uploaded} enviadas`;
+      if (resp.errors > 0) msg += `, ${resp.errors} erros`;
+      if (resp.remaining > 0) msg += `, ${resp.remaining} restantes`;
+      showToast(msg, resp.errors > 0 ? 'error' : 'success');
+      loadPendingThumbs();
+    } else {
+      showToast('Erro ao enviar thumbnails', 'error');
+    }
+  } catch (e) {
+    showToast('Erro: ' + e.message, 'error');
+  }
+  btn.disabled = false;
+  btn.textContent = 'Enviar para YouTube';
 }
 
 // Keyboard: Escape closes modals

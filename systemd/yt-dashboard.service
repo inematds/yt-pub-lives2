@@ -5,8 +5,8 @@ After=network.target
 [Service]
 Type=simple
 User=nmaldaner
-WorkingDirectory=/home/nmaldaner/projetos/gws/dashboard
-ExecStart=/usr/bin/python3 /home/nmaldaner/projetos/gws/dashboard/server.py 8090
+WorkingDirectory=/home/nmaldaner/projetos/yt-pub-lives/dashboard
+ExecStart=/usr/bin/python3 /home/nmaldaner/projetos/yt-pub-lives/dashboard/server.py 8090
 Restart=always
 RestartSec=5
 Environment=PATH=/usr/bin:/home/nmaldaner/.local/bin:/home/nmaldaner/.npm-global/bin
