@@ -130,7 +130,7 @@ def youtube_api(endpoint, params=None):
         return {'error': error_body, 'status': e.code}
 
 
-def get_channel_lives(channel_id, page_token=None):
+def get_channel_lives(channel_id, page_token=None, published_after=None, published_before=None):
     """Get live streams from channel using search API."""
     params = {
         'channelId': channel_id,
@@ -142,6 +142,10 @@ def get_channel_lives(channel_id, page_token=None):
     }
     if page_token:
         params['pageToken'] = page_token
+    if published_after:
+        params['publishedAfter'] = published_after
+    if published_before:
+        params['publishedBefore'] = published_before
     return youtube_api('search', params)
 
 
@@ -473,8 +477,23 @@ class DashboardHandler(SimpleHTTPRequestHandler):
         })
 
     def handle_sync(self, data):
-        """Sync lives from YouTube channel."""
+        """Sync lives from YouTube channel.
+        Options:
+          mode: 'novas' (only new, skip existing) | 'todas' (all in date range)
+          date_from: 'YYYY-MM-DD' (optional)
+          date_to: 'YYYY-MM-DD' (optional)
+          max_pages: int (default 10)
+        """
         channel_id = os.environ.get('YOUTUBE_CHANNEL_ID', '')
+        mode = data.get('mode', 'novas')
+        date_from = data.get('date_from', '')
+        date_to = data.get('date_to', '')
+        max_lives = data.get('max_lives', 50)
+        max_pages = (max_lives // 50) + 1
+
+        # Build date filters for YouTube API (ISO 8601)
+        published_after = f'{date_from}T00:00:00Z' if date_from else None
+        published_before = f'{date_to}T23:59:59Z' if date_to else None
 
         # Get existing video IDs from sheet
         existing_result = sheets_get('LIVES!A2:A1000')
@@ -486,10 +505,9 @@ class DashboardHandler(SimpleHTTPRequestHandler):
         # Fetch lives from YouTube
         all_lives = []
         page_token = None
-        max_pages = data.get('max_pages', 3)  # limit pages to avoid quota
 
         for _ in range(max_pages):
-            result = get_channel_lives(channel_id, page_token)
+            result = get_channel_lives(channel_id, page_token, published_after, published_before)
             if 'error' in result:
                 self.send_json(500, {'error': result['error']})
                 return
@@ -497,18 +515,24 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             items = result.get('items', [])
             for item in items:
                 vid = item['id'].get('videoId', '')
-                if vid and vid not in existing_ids:
-                    snippet = item.get('snippet', {})
-                    all_lives.append({
-                        'video_id': vid,
-                        'titulo': snippet.get('title', ''),
-                        'data_live': snippet.get('publishedAt', '')[:10],
-                        'url': f'https://www.youtube.com/watch?v={vid}'
-                    })
+                if not vid:
+                    continue
+                if mode == 'novas' and vid in existing_ids:
+                    continue
+                snippet = item.get('snippet', {})
+                all_lives.append({
+                    'video_id': vid,
+                    'titulo': snippet.get('title', ''),
+                    'data_live': snippet.get('publishedAt', '')[:10],
+                    'url': f'https://www.youtube.com/watch?v={vid}'
+                })
 
             page_token = result.get('nextPageToken')
             if not page_token:
                 break
+
+        # Filter out duplicates and limit
+        all_lives = [l for l in all_lives if l['video_id'] not in existing_ids][:max_lives]
 
         # Get durations for new videos
         if all_lives:
@@ -554,6 +578,9 @@ class DashboardHandler(SimpleHTTPRequestHandler):
         self.send_json(200, {
             'novas_lives': len(all_lives),
             'ja_existentes': len(existing_ids),
+            'mode': mode,
+            'date_from': date_from,
+            'date_to': date_to,
             'lives': all_lives
         })
 

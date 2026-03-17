@@ -182,7 +182,35 @@ Caso o upload falhe, ficam como pendentes e podem ser reenviadas pelo dashboard.
 
 ---
 
-## 9. Checklist final
+## 9. Discussao futura: como gerenciar mudanca de canais
+
+Hoje os dados dos canais estao em dois lugares:
+
+1. **`config/.env`** — `YOUTUBE_CHANNEL_ID` (origem) e credenciais OAuth (determinam o destino)
+2. **Planilha CONFIG** — `canal_origem_nome`, `canal_destino_nome`, etc. (visual, pro dashboard)
+
+### Mudar canal de ORIGEM (de onde vem as lives)
+Simples — trocar `YOUTUBE_CHANNEL_ID` no `.env` e os campos `canal_origem_*` na planilha CONFIG.
+
+### Mudar canal de DESTINO (onde publica os clips)
+Complexo — envolve:
+- Novas credenciais OAuth (outra conta Google)
+- Novo `credentials.enc` (reautenticacao via `yt-auth`)
+- Possivelmente nova planilha e novo projeto GCP
+
+### Opcoes de arquitetura a considerar:
+
+**A) Manter como esta** — `.env` e a fonte da verdade, dashboard so mostra. Para mudar, edita o `.env` e a planilha manualmente. Simples, funciona para "configura uma vez e roda".
+
+**B) Editavel pelo dashboard** — campos de canal editaveis no painel de config, salvando na planilha e no `.env`. Mudar o destino ainda precisaria de reautenticacao OAuth.
+
+**C) Multi-canal** — um unico projeto suporta multiplos destinos com dropdown para selecionar. Complexidade maior, mas permite escalar para varios canais.
+
+**Decisao pendente** — definir se o caso de uso e "configura uma vez e roda" ou se precisa trocar canais com frequencia.
+
+---
+
+## 10. Checklist final
 
 - [x] Projeto GCP criado (`certain-perigee-490501-r2`)
 - [x] YouTube Data API v3 ativada

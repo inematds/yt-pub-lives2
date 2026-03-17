@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>yt-pub-lives2 v3.1.0 - Lives & Clips Dashboard</title>
+<title>yt-pub-lives2 v3.2.0 - Lives & Clips Dashboard</title>
 <style>
   :root {
     --bg: #0f1117;
@@ -605,14 +605,54 @@
 
 <div class="container">
   <header>
-    <h1><span>GWS</span> Lives & Clips <small style="font-size:0.5em;color:var(--muted)">- yt-pub-lives2 v3.1.0</small></h1>
+    <h1><span>GWS</span> Lives & Clips <small style="font-size:0.5em;color:var(--muted)">- yt-pub-lives2 v3.2.0</small>
+      <span id="headerCanais" style="display:block;font-size:0.4em;font-weight:normal;margin-top:4px"></span>
+    </h1>
     <div class="header-actions">
       <button id="btnCortes" onclick="togglePipeline('cortes')" class="danger small">Parar Cortes</button>
       <button id="btnPub" onclick="togglePipeline('pub')" class="danger small">Parar Publicacao</button>
       <button class="secondary" onclick="toggleConfig()">Configuracoes</button>
-      <button onclick="syncLives()" id="btnSync">Sincronizar Lives</button>
+      <button onclick="toggleSyncPanel()" id="btnSync">Sincronizar Lives</button>
     </div>
   </header>
+
+  <!-- Sync Panel -->
+  <div class="config-panel" id="syncPanel" style="display:none;margin-bottom:16px">
+    <div class="config-section">
+      <h3>Sincronizar Lives do Canal de Origem</h3>
+      <div class="config-grid" style="grid-template-columns: 1fr 1fr 1fr 1fr auto;">
+        <div class="config-field">
+          <label>Modo</label>
+          <select id="syncMode">
+            <option value="novas">So pendentes (novas)</option>
+            <option value="todas">Todas no periodo</option>
+          </select>
+        </div>
+        <div class="config-field">
+          <label>Data inicio</label>
+          <input type="date" id="syncDateFrom">
+        </div>
+        <div class="config-field">
+          <label>Data fim</label>
+          <input type="date" id="syncDateTo">
+        </div>
+        <div class="config-field">
+          <label>Max lives</label>
+          <select id="syncMaxLives">
+            <option value="10">10</option>
+            <option value="50" selected>50</option>
+            <option value="100">100</option>
+            <option value="500">500</option>
+            <option value="1000">1000</option>
+          </select>
+        </div>
+        <div class="config-field" style="display:flex;align-items:flex-end">
+          <button onclick="syncLives()" id="btnSyncRun">Sincronizar</button>
+        </div>
+      </div>
+      <div id="syncResult" style="margin-top:8px;color:var(--muted);font-size:0.9em"></div>
+    </div>
+  </div>
 
   <!-- Stats -->
   <div class="stats" id="stats">
@@ -648,6 +688,21 @@
 
   <!-- Config Panel -->
   <div class="config-panel" id="configPanel">
+
+    <!-- Canais -->
+    <div class="config-section">
+      <h3>Canais</h3>
+      <div class="config-grid" style="grid-template-columns: 1fr 1fr;">
+        <div class="config-field">
+          <label>Canal de Origem (lives)</label>
+          <div id="cfgCanalOrigem" style="padding:8px 0;color:var(--text)">-</div>
+        </div>
+        <div class="config-field">
+          <label>Canal de Destino (clips)</label>
+          <div id="cfgCanalDestino" style="padding:8px 0;color:var(--text)">-</div>
+        </div>
+      </div>
+    </div>
 
     <!-- Corte / Producao (em cima) -->
     <div class="config-section">
@@ -1514,6 +1569,23 @@ async function loadConfig() {
   const data = await fetchJson('/api/config');
   const c = data.config;
 
+  // Canais
+  if (c.canal_origem_nome) {
+    const origemEl = document.getElementById('cfgCanalOrigem');
+    origemEl.innerHTML = `<a href="${c.canal_origem_url || '#'}" target="_blank" style="color:var(--blue);text-decoration:none">${c.canal_origem_nome}</a> <span style="color:var(--muted);font-size:0.85em">(${c.canal_origem_id || ''})</span>`;
+  }
+  if (c.canal_destino_nome) {
+    const destinoEl = document.getElementById('cfgCanalDestino');
+    destinoEl.innerHTML = `<a href="${c.canal_destino_url || '#'}" target="_blank" style="color:var(--green);text-decoration:none">${c.canal_destino_nome}</a> <span style="color:var(--muted);font-size:0.85em">(${c.canal_destino_id || ''})</span>`;
+  }
+  // Header canais
+  if (c.canal_origem_nome && c.canal_destino_nome) {
+    document.getElementById('headerCanais').innerHTML =
+      `<a href="${c.canal_origem_url || '#'}" target="_blank" style="color:var(--blue);text-decoration:none">${c.canal_origem_nome}</a>` +
+      ` <span style="color:var(--muted)">→</span> ` +
+      `<a href="${c.canal_destino_url || '#'}" target="_blank" style="color:var(--green);text-decoration:none">${c.canal_destino_nome}</a>`;
+  }
+
   // Publicacao
   if (c.privacy_padrao) document.getElementById('cfgPrivacy').value = c.privacy_padrao;
   hourState.pub = stringToHours(c.pub_horarios || '08:00,11:00,14:00,17:00');
@@ -1665,25 +1737,44 @@ async function saveConfig() {
   }
 }
 
+function toggleSyncPanel() {
+  const panel = document.getElementById('syncPanel');
+  panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+}
+
 async function syncLives() {
-  const btn = document.getElementById('btnSync');
+  const btn = document.getElementById('btnSyncRun');
   btn.disabled = true;
   btn.innerHTML = '<span class="spinner"></span>Sincronizando...';
+  document.getElementById('syncResult').textContent = '';
+
+  const mode = document.getElementById('syncMode').value;
+  const dateFrom = document.getElementById('syncDateFrom').value;
+  const dateTo = document.getElementById('syncDateTo').value;
+  const maxLives = parseInt(document.getElementById('syncMaxLives').value);
+
+  const payload = { mode, max_lives: maxLives };
+  if (dateFrom) payload.date_from = dateFrom;
+  if (dateTo) payload.date_to = dateTo;
 
   try {
     const data = await fetchJson('/api/sync', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({max_pages: 5})
+      body: JSON.stringify(payload)
     });
 
-    showToast(`Sync completo! ${data.novas_lives} novas lives encontradas.`);
+    const periodo = dateFrom && dateTo ? ` (${dateFrom} a ${dateTo})` : dateFrom ? ` (a partir de ${dateFrom})` : dateTo ? ` (ate ${dateTo})` : '';
+    const msg = `${data.novas_lives} novas lives adicionadas${periodo}. ${data.ja_existentes} ja existiam.`;
+    document.getElementById('syncResult').textContent = msg;
+    showToast(msg);
     await loadAll();
   } catch (e) {
     showToast('Erro ao sincronizar: ' + e.message, 'error');
+    document.getElementById('syncResult').textContent = 'Erro: ' + e.message;
   } finally {
     btn.disabled = false;
-    btn.textContent = 'Sincronizar Lives';
+    btn.textContent = 'Sincronizar';
   }
 }
 
