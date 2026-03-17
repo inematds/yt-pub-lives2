@@ -17,14 +17,13 @@ import urllib.parse
 from datetime import datetime
 
 # Config
-CONFIG_DIR = os.environ.get('GWS_CONFIG_DIR', os.path.expanduser('~/.config/gws'))
+PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
+CONFIG_DIR = os.environ.get('GWS_CONFIG_DIR', os.path.join(PROJECT_ROOT, 'config'))
 ENV_FILE = os.path.join(CONFIG_DIR, '.env')
-SPREADSHEET_ID = os.environ.get('SPREADSHEET_ID', '1KG6sp77DeelQ6RTqzMZN2INXHJWxuUFtOUI3dOf7Ivs')
 SCRIPTS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'scripts')
-LIVES_DIR = os.environ.get('LIVES_DIR', os.path.expanduser('~/projetos/gws/lives'))
 STATUS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'dashboard', 'scheduler_status.json')
 
-# Load env
+# Load env (before reading env-dependent vars)
 if os.path.exists(ENV_FILE):
     with open(ENV_FILE) as f:
         for line in f:
@@ -32,6 +31,9 @@ if os.path.exists(ENV_FILE):
             if line and not line.startswith('#') and '=' in line:
                 key, val = line.split('=', 1)
                 os.environ[key] = val
+
+SPREADSHEET_ID = os.environ.get('SPREADSHEET_ID', '')
+LIVES_DIR = os.environ.get('LIVES_DIR', os.path.join(PROJECT_ROOT, 'lives'))
 
 
 def log(msg):

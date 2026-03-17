@@ -1,16 +1,16 @@
 [Unit]
-Description=YT Pub Lives Dashboard
+Description=YT Pub Lives2 Dashboard
 After=network.target
 
 [Service]
 Type=simple
 User=nmaldaner
-WorkingDirectory=/home/nmaldaner/projetos/yt-pub-lives/dashboard
-ExecStart=/usr/bin/python3 /home/nmaldaner/projetos/yt-pub-lives/dashboard/server.py 8090
+WorkingDirectory=/home/nmaldaner/projetos/yt-pub-lives2/dashboard
+ExecStart=/usr/bin/python3 /home/nmaldaner/projetos/yt-pub-lives2/dashboard/server.py 8091
 Restart=always
 RestartSec=5
 Environment=PATH=/usr/bin:/home/nmaldaner/.local/bin:/home/nmaldaner/.npm-global/bin
-Environment=GWS_CONFIG_DIR=/home/nmaldaner/.config/gws
+Environment=GWS_CONFIG_DIR=/home/nmaldaner/projetos/yt-pub-lives2/config
 
 [Install]
 WantedBy=multi-user.target

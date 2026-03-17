@@ -16,7 +16,8 @@ from PIL import Image, ImageDraw, ImageFont, ImageFilter
 import io
 
 # Config
-CONFIG_DIR = os.environ.get('GWS_CONFIG_DIR', os.path.expanduser('~/.config/gws'))
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+CONFIG_DIR = os.environ.get('GWS_CONFIG_DIR', os.path.join(SCRIPT_DIR, '..', 'config'))
 ENV_FILE = os.path.join(CONFIG_DIR, '.env')
 
 # Load env

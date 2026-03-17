@@ -1,6 +1,11 @@
 __pycache__/
 *.pyc
 .env
+config/.env
+config/credentials.enc
+config/.encryption_key
+config/client_secret.json
+config/token_cache.json
 lives/
 node_modules/
 *.log

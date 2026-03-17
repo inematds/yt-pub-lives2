@@ -15,12 +15,12 @@ from socketserver import ThreadingMixIn
 from pathlib import Path
 
 # Config
-CONFIG_DIR = os.environ.get('GWS_CONFIG_DIR', os.path.expanduser('~/.config/gws'))
+PROJECT_ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..')
+CONFIG_DIR = os.environ.get('GWS_CONFIG_DIR', os.path.join(PROJECT_ROOT, 'config'))
 ENV_FILE = os.path.join(CONFIG_DIR, '.env')
-SPREADSHEET_ID = '1KG6sp77DeelQ6RTqzMZN2INXHJWxuUFtOUI3dOf7Ivs'
-PORT = 8090
+PORT = 8091
 
-# Load env
+# Load env (before reading env-dependent vars)
 if os.path.exists(ENV_FILE):
     with open(ENV_FILE) as f:
         for line in f:
@@ -28,6 +28,8 @@ if os.path.exists(ENV_FILE):
             if line and not line.startswith('#') and '=' in line:
                 key, val = line.split('=', 1)
                 os.environ[key] = val
+
+SPREADSHEET_ID = os.environ.get('SPREADSHEET_ID', '')
 
 
 def get_access_token():
@@ -251,7 +253,7 @@ class DashboardHandler(SimpleHTTPRequestHandler):
         if '..' in video_id or '..' in filename or '/' in filename:
             self.send_json(400, {'error': 'invalid path'})
             return
-        lives_dir = os.environ.get('LIVES_DIR', os.path.expanduser('~/projetos/gws/lives'))
+        lives_dir = os.environ.get('LIVES_DIR', os.path.join(PROJECT_ROOT, 'lives'))
         filepath = os.path.join(lives_dir, video_id, 'clips', filename)
         if not os.path.exists(filepath):
             self.send_json(404, {'error': 'file not found'})
@@ -322,7 +324,7 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             publicados.append(pub)
 
         # Enrich publicados with filename from manifest
-        lives_dir = os.environ.get('LIVES_DIR', os.path.expanduser('~/projetos/gws/lives'))
+        lives_dir = os.environ.get('LIVES_DIR', os.path.join(PROJECT_ROOT, 'lives'))
         manifests_cache = {}
         for pub in publicados:
             lid = pub.get('live_video_id', '')
@@ -340,7 +342,7 @@ class DashboardHandler(SimpleHTTPRequestHandler):
 
         # Incluir clips pendentes (cortados mas nao publicados)
         pendentes = []
-        lives_dir = os.environ.get('LIVES_DIR', os.path.expanduser('~/projetos/gws/lives'))
+        lives_dir = os.environ.get('LIVES_DIR', os.path.join(PROJECT_ROOT, 'lives'))
         pub_titles = set(p.get('clip_titulo', '') for p in publicados)
 
         live_ids = [filter_live_id] if filter_live_id else []
@@ -392,7 +394,7 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             self.send_json(400, {'error': 'id parameter required'})
             return
 
-        lives_dir = os.environ.get('LIVES_DIR', os.path.expanduser('~/projetos/gws/lives'))
+        lives_dir = os.environ.get('LIVES_DIR', os.path.join(PROJECT_ROOT, 'lives'))
         job_dir = os.path.join(lives_dir, video_id)
 
         result = {'video_id': video_id, 'has_transcript': False, 'has_topics': False}
@@ -423,7 +425,7 @@ class DashboardHandler(SimpleHTTPRequestHandler):
         self.send_json(200, {'config': config})
 
     def handle_api_prompts_get(self):
-        config_dir = os.environ.get('GWS_CONFIG_DIR', os.path.expanduser('~/.config/gws'))
+        config_dir = os.environ.get('GWS_CONFIG_DIR', os.path.join(PROJECT_ROOT, 'config'))
         prompts = {}
         for name in ('prompt_cortes', 'prompt_pub', 'prompt_thumb'):
             path = os.path.join(config_dir, f'{name}.txt')
@@ -435,7 +437,7 @@ class DashboardHandler(SimpleHTTPRequestHandler):
         self.send_json(200, {'prompts': prompts})
 
     def handle_api_prompts_save(self, data):
-        config_dir = os.environ.get('GWS_CONFIG_DIR', os.path.expanduser('~/.config/gws'))
+        config_dir = os.environ.get('GWS_CONFIG_DIR', os.path.join(PROJECT_ROOT, 'config'))
         saved = []
         for name in ('prompt_cortes', 'prompt_pub', 'prompt_thumb'):
             if name in data:
@@ -474,7 +476,7 @@ class DashboardHandler(SimpleHTTPRequestHandler):
 
     def handle_sync(self, data):
         """Sync lives from YouTube channel."""
-        channel_id = os.environ.get('YOUTUBE_CHANNEL_ID', 'UC2QbQDyPKuHk93dwo5iq3Sw')
+        channel_id = os.environ.get('YOUTUBE_CHANNEL_ID', '')
 
         # Get existing video IDs from sheet
         existing_result = sheets_get('LIVES!A2:A1000')
@@ -735,7 +737,7 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             self.send_json(400, {'error': 'live_video_id and title required'})
             return
 
-        lives_dir = os.environ.get('LIVES_DIR', os.path.expanduser('~/projetos/gws/lives'))
+        lives_dir = os.environ.get('LIVES_DIR', os.path.join(PROJECT_ROOT, 'lives'))
         manifest_path = os.path.join(lives_dir, live_id, 'clips_manifest.json')
         if not os.path.exists(manifest_path):
             self.send_json(404, {'error': 'manifest not found'})
@@ -762,7 +764,7 @@ class DashboardHandler(SimpleHTTPRequestHandler):
     def handle_cleanup_clips(self, data):
         """Deleta arquivos mp4 dos clips do disco. Mantem manifest e planilha."""
         video_id = data.get('video_id', '')  # opcional: limpar só uma live
-        lives_dir = os.environ.get('LIVES_DIR', os.path.expanduser('~/projetos/gws/lives'))
+        lives_dir = os.environ.get('LIVES_DIR', os.path.join(PROJECT_ROOT, 'lives'))
         deleted = 0
         freed = 0
 
@@ -789,7 +791,7 @@ class DashboardHandler(SimpleHTTPRequestHandler):
     def handle_cleanup_sources(self, data):
         """Deleta arquivos source.mp4 (videos originais) do disco. Mantem clips e manifest."""
         video_id = data.get('video_id', '')  # opcional: limpar só uma live
-        lives_dir = os.environ.get('LIVES_DIR', os.path.expanduser('~/projetos/gws/lives'))
+        lives_dir = os.environ.get('LIVES_DIR', os.path.join(PROJECT_ROOT, 'lives'))
         deleted = 0
         freed = 0
 
@@ -863,7 +865,7 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             return
 
         # Remove arquivos do disco
-        lives_dir = os.environ.get('LIVES_DIR', os.path.expanduser('~/projetos/gws/lives'))
+        lives_dir = os.environ.get('LIVES_DIR', os.path.join(PROJECT_ROOT, 'lives'))
         job_dir = os.path.join(lives_dir, video_id)
         freed = 0
         if os.path.exists(job_dir):

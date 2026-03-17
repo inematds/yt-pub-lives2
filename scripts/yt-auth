@@ -1,0 +1,199 @@
+#!/usr/bin/env python3
+"""
+yt-auth — Autenticacao OAuth para o canal de destino.
+Abre o browser, faz o fluxo OAuth, e salva credentials.enc + .encryption_key no config/.
+
+Uso:
+  python3 scripts/yt-auth
+"""
+
+import json
+import os
+import sys
+import base64
+import secrets
+import urllib.parse
+import urllib.request
+import webbrowser
+from http.server import HTTPServer, BaseHTTPRequestHandler
+
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+PROJECT_ROOT = os.path.join(SCRIPT_DIR, '..')
+CONFIG_DIR = os.environ.get('GWS_CONFIG_DIR', os.path.join(PROJECT_ROOT, 'config'))
+
+# Load .env
+env_file = os.path.join(CONFIG_DIR, '.env')
+if os.path.exists(env_file):
+    with open(env_file) as f:
+        for line in f:
+            line = line.strip()
+            if line and not line.startswith('#') and '=' in line:
+                key, val = line.split('=', 1)
+                os.environ[key] = val
+
+CLIENT_ID = os.environ.get('CLIENT_ID', '')
+CLIENT_SECRET = os.environ.get('CLIENT_SECRET', '')
+
+if not CLIENT_ID or not CLIENT_SECRET:
+    print('Erro: CLIENT_ID e CLIENT_SECRET devem estar definidos em config/.env')
+    sys.exit(1)
+
+SCOPES = [
+    'https://www.googleapis.com/auth/youtube',
+    'https://www.googleapis.com/auth/youtube.upload',
+    'https://www.googleapis.com/auth/spreadsheets',
+]
+
+REDIRECT_PORT = 8888
+REDIRECT_URI = f'http://localhost:{REDIRECT_PORT}'
+
+auth_code = None
+
+
+class OAuthHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        global auth_code
+        qs = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+        auth_code = qs.get('code', [None])[0]
+
+        self.send_response(200)
+        self.send_header('Content-Type', 'text/html; charset=utf-8')
+        self.end_headers()
+
+        if auth_code:
+            self.wfile.write(b'<h1>Autenticacao concluida!</h1><p>Pode fechar esta aba.</p>')
+        else:
+            error = qs.get('error', ['desconhecido'])[0]
+            self.wfile.write(f'<h1>Erro: {error}</h1>'.encode())
+
+    def log_message(self, format, *args):
+        pass  # silencia logs
+
+
+def main():
+    print('==> yt-auth — Autenticacao OAuth')
+    print(f'    Config: {CONFIG_DIR}')
+    print(f'    Client: {CLIENT_ID[:20]}...')
+    print()
+
+    # 1. Build auth URL
+    params = urllib.parse.urlencode({
+        'client_id': CLIENT_ID,
+        'redirect_uri': REDIRECT_URI,
+        'response_type': 'code',
+        'scope': ' '.join(SCOPES),
+        'access_type': 'offline',
+        'prompt': 'consent',
+    })
+    auth_url = f'https://accounts.google.com/o/oauth2/auth?{params}'
+
+    print('==> Abrindo browser para autenticacao...')
+    print(f'    Se nao abrir automaticamente, acesse:')
+    print(f'    {auth_url}')
+    print()
+
+    webbrowser.open(auth_url)
+
+    # 2. Wait for callback
+    print(f'==> Aguardando callback em http://localhost:{REDIRECT_PORT}...')
+    server = HTTPServer(('localhost', REDIRECT_PORT), OAuthHandler)
+    server.handle_request()
+
+    if not auth_code:
+        print('Erro: nao recebeu codigo de autorizacao')
+        sys.exit(1)
+
+    print('==> Codigo recebido, trocando por tokens...')
+
+    # 3. Exchange code for tokens
+    token_data = urllib.parse.urlencode({
+        'client_id': CLIENT_ID,
+        'client_secret': CLIENT_SECRET,
+        'code': auth_code,
+        'grant_type': 'authorization_code',
+        'redirect_uri': REDIRECT_URI,
+    }).encode()
+
+    req = urllib.request.Request('https://oauth2.googleapis.com/token', data=token_data)
+    try:
+        resp = urllib.request.urlopen(req)
+        tokens = json.loads(resp.read())
+    except urllib.error.HTTPError as e:
+        error_body = e.read().decode()
+        print(f'Erro ao trocar codigo: {error_body}')
+        sys.exit(1)
+
+    if 'refresh_token' not in tokens:
+        print('Erro: resposta nao contem refresh_token')
+        print(json.dumps(tokens, indent=2))
+        sys.exit(1)
+
+    print('    Tokens obtidos com sucesso!')
+
+    # 4. Encrypt and save
+    from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+
+    # Generate encryption key
+    key = secrets.token_bytes(32)
+    key_b64 = base64.b64encode(key).decode()
+
+    # Encrypt tokens
+    aesgcm = AESGCM(key)
+    nonce = secrets.token_bytes(12)
+    creds_json = json.dumps({
+        'access_token': tokens.get('access_token', ''),
+        'refresh_token': tokens['refresh_token'],
+        'token_type': tokens.get('token_type', 'Bearer'),
+    }).encode()
+
+    encrypted = nonce + aesgcm.encrypt(nonce, creds_json, None)
+
+    # Save
+    key_path = os.path.join(CONFIG_DIR, '.encryption_key')
+    creds_path = os.path.join(CONFIG_DIR, 'credentials.enc')
+
+    with open(key_path, 'w') as f:
+        f.write(key_b64)
+    os.chmod(key_path, 0o600)
+
+    with open(creds_path, 'wb') as f:
+        f.write(encrypted)
+    os.chmod(creds_path, 0o600)
+
+    print()
+    print('==> Autenticacao concluida!')
+    print(f'    {key_path}')
+    print(f'    {creds_path}')
+
+    # 5. Quick test
+    print()
+    print('==> Testando acesso...')
+    try:
+        test_data = urllib.parse.urlencode({
+            'client_id': CLIENT_ID,
+            'client_secret': CLIENT_SECRET,
+            'refresh_token': tokens['refresh_token'],
+            'grant_type': 'refresh_token'
+        }).encode()
+        req = urllib.request.Request('https://oauth2.googleapis.com/token', data=test_data)
+        resp = json.loads(urllib.request.urlopen(req).read())
+        access_token = resp['access_token']
+
+        # Get channel info
+        req = urllib.request.Request('https://www.googleapis.com/youtube/v3/channels?part=snippet&mine=true')
+        req.add_header('Authorization', f'Bearer {access_token}')
+        channel = json.loads(urllib.request.urlopen(req).read())
+
+        items = channel.get('items', [])
+        if items:
+            name = items[0]['snippet']['title']
+            ch_id = items[0]['id']
+            print(f'    Canal: {name} ({ch_id})')
+        else:
+            print('    Token OK mas nenhum canal encontrado')
+    except Exception as e:
+        print(f'    Aviso: teste falhou ({e}), mas credenciais foram salvas')
+
+
+if __name__ == '__main__':
+    main()

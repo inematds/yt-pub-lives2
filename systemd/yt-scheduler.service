@@ -1,17 +1,17 @@
 [Unit]
-Description=YT Pub Lives Scheduler
-After=network.target yt-dashboard.service
+Description=YT Pub Lives2 Scheduler
+After=network.target yt-dashboard2.service
 
 [Service]
 Type=simple
 User=nmaldaner
-WorkingDirectory=/home/nmaldaner/projetos/yt-pub-lives
-ExecStart=/usr/bin/python3 /home/nmaldaner/projetos/yt-pub-lives/scheduler.py
+WorkingDirectory=/home/nmaldaner/projetos/yt-pub-lives2
+ExecStart=/usr/bin/python3 /home/nmaldaner/projetos/yt-pub-lives2/scheduler.py
 Restart=always
 RestartSec=10
-Environment=PATH=/home/nmaldaner/.deno/bin:/usr/bin:/home/nmaldaner/.local/bin:/home/nmaldaner/.npm-global/bin:/home/nmaldaner/projetos/yt-pub-lives/scripts
-Environment=GWS_CONFIG_DIR=/home/nmaldaner/.config/gws
-Environment=LIVES_DIR=/home/nmaldaner/projetos/yt-pub-lives/lives
+Environment=PATH=/home/nmaldaner/.deno/bin:/usr/bin:/home/nmaldaner/.local/bin:/home/nmaldaner/.npm-global/bin:/home/nmaldaner/projetos/yt-pub-lives2/scripts
+Environment=GWS_CONFIG_DIR=/home/nmaldaner/projetos/yt-pub-lives2/config
+Environment=LIVES_DIR=/home/nmaldaner/projetos/yt-pub-lives2/lives
 Environment=PYTHONUNBUFFERED=1
 
 [Install]

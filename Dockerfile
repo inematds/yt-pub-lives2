@@ -36,6 +36,6 @@ ENV PYTHONUNBUFFERED=1
 
 WORKDIR /app
 
-EXPOSE 8090
+EXPOSE 8091
 
-CMD ["python3", "dashboard/server.py", "8090"]
+CMD ["python3", "dashboard/server.py", "8091"]

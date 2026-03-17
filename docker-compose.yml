@@ -2,7 +2,7 @@ services:
   dashboard:
     build: .
     ports:
-      - "8090:8090"
+      - "8091:8091"
     volumes:
       - ./config:/config        # .env, credentials.enc, .encryption_key
       - ./lives:/data/lives     # videos processados

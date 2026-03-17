@@ -14,11 +14,12 @@
 set -euo pipefail
 
 # --- Config (lê do .env) ---
-ENV_FILE="${HOME}/.config/gws/.env"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+ENV_FILE="${GWS_CONFIG_DIR:-${SCRIPT_DIR}/../config}/.env"
 if [[ -f "$ENV_FILE" ]]; then
   set -a; source "$ENV_FILE"; set +a
 fi
-GWS_CONFIG_DIR="${GOOGLE_WORKSPACE_CLI_CONFIG_DIR:-$HOME/.config/gws}"
+GWS_CONFIG_DIR="${GWS_CONFIG_DIR:-${SCRIPT_DIR}/../config}"
 CLIENT_ID="${CLIENT_ID:?Erro: CLIENT_ID não definido. Verifique $ENV_FILE}"
 CLIENT_SECRET="${CLIENT_SECRET:?Erro: CLIENT_SECRET não definido. Verifique $ENV_FILE}"
 API_KEY="${API_KEY:?Erro: API_KEY não definido. Verifique $ENV_FILE}"

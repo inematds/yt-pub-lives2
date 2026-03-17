@@ -17,12 +17,13 @@ set -euo pipefail
 export PATH="$HOME/.deno/bin:/usr/bin:$HOME/.npm-global/bin:$HOME/google-cloud-sdk/bin:$HOME/.local/bin:$PATH"
 
 # --- Config ---
-ENV_FILE="${GWS_CONFIG_DIR:-${HOME}/.config/gws}/.env"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+ENV_FILE="${GWS_CONFIG_DIR:-${SCRIPT_DIR}/../config}/.env"
 if [[ -f "$ENV_FILE" ]]; then
   set -a; source "$ENV_FILE"; set +a
 fi
 
-WORK_DIR="${LIVES_DIR:-${HOME}/projetos/gws/lives}"
+WORK_DIR="${LIVES_DIR:-${SCRIPT_DIR}/../lives}"
 PRIVACY="unlisted"
 DRY_RUN=false
 PUBLISH=false
@@ -151,7 +152,7 @@ PYEOF
 # ============================================================
 echo "==> [3/5] Analisando tópicos (modo: $AI_MODE)..."
 
-PROMPT_CONFIG_FILE="${GWS_CONFIG_DIR:-${HOME}/.config/gws}/prompt_cortes.txt"
+PROMPT_CONFIG_FILE="${GWS_CONFIG_DIR:-${SCRIPT_DIR}/../config}/prompt_cortes.txt"
 if [[ -f "$PROMPT_CONFIG_FILE" ]] && [[ -s "$PROMPT_CONFIG_FILE" ]]; then
   PROMPT_TEMPLATE="$(cat "$PROMPT_CONFIG_FILE")"
 else
