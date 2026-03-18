@@ -668,6 +668,7 @@ def process_publicacao(config):
                     log(f'  Erro ao gravar na planilha: {e}')
 
                 count += 1
+                published_titles.add(clip['title'])
                 log(f'  Publicado: {clip["title"][:50]} -> {new_vid}')
 
         # Update counter if clips were published OR if counter is out of sync
