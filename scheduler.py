@@ -237,7 +237,7 @@ def run_corte(video_id, config=None):
         return False
 
 
-def refine_pub_with_ai(title, description, config):
+def refine_pub_with_ai(title, description, config, video_id=''):
     """Usa IA para refinar titulo e descricao antes de publicar."""
     prompt_file = os.path.join(CONFIG_DIR, 'prompt_pub.txt')
     if not os.path.exists(prompt_file):
@@ -257,7 +257,7 @@ def refine_pub_with_ai(title, description, config):
     api_url = 'https://api.piramyd.cloud/v1/chat/completions'
     ai_model = config.get('ai_model', '') or 'claude-sonnet-4.5'
 
-    user_msg = f'Titulo original: "{title}"\nDescricao original: "{description}"'
+    user_msg = f'Titulo original: "{title}"\nDescricao original: "{description}"\nVideo ID da live original: {video_id}'
 
     payload = {
         'model': ai_model,
@@ -618,7 +618,7 @@ def process_publicacao(config):
 
             # Refinar titulo e descricao com IA
             update_status('publicando', f'Refinando com IA: {clip_title[:50]}', vid, step='refine', clip_title=clip_title[:50])
-            clip_title, clip_desc = refine_pub_with_ai(clip_title, clip_desc, config)
+            clip_title, clip_desc = refine_pub_with_ai(clip_title, clip_desc, config, video_id=vid)
 
             update_status('publicando', f'Enviando: {clip_title[:50]}', vid, step='upload', clip_title=clip_title[:50])
             new_vid = run_publicacao(
