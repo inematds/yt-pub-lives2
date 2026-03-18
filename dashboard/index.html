@@ -650,7 +650,7 @@
 
 <div class="container">
   <header>
-    <h1><span>GWS</span> Lives & Clips <small style="font-size:0.5em;color:var(--muted)">- yt-pub-lives2 v3.5.0</small>
+    <h1><span>GWS</span> Lives & Clips <small style="font-size:0.5em;color:var(--muted)">- yt-pub-lives2 <a href="#" onclick="openModal('modalChangelog');return false" style="color:var(--accent);text-decoration:none" title="Ver changelog">v3.5.0</a></small>
       <span id="headerCanais" style="display:block;font-size:0.4em;font-weight:normal;margin-top:4px"></span>
     </h1>
     <div class="header-actions">
@@ -2194,6 +2194,47 @@ document.addEventListener('keydown', e => {
 
 loadAll();
 </script>
+
+<!-- Changelog Modal -->
+<div class="modal-overlay" id="modalChangelog" onclick="if(event.target===this)closeModal('modalChangelog')">
+  <div class="modal" style="max-width:600px">
+    <div class="modal-header">
+      <h2>Changelog</h2>
+      <button onclick="closeModal('modalChangelog')" style="background:none;border:none;color:var(--muted);font-size:1.2em;cursor:pointer">X</button>
+    </div>
+    <div class="modal-body" style="padding:16px;overflow-y:auto;font-size:0.85em;line-height:1.8">
+      <h3 style="color:var(--accent);margin-bottom:8px">v3.5.0</h3>
+      <p style="color:var(--muted);margin-bottom:4px"><strong>Features:</strong></p>
+      <ul style="margin:0 0 8px 20px;color:var(--text)">
+        <li>Health bar - status do sistema (yt-dlp, Sheets, APIs, YouTube, Scheduler)</li>
+        <li>Proximos horarios de corte/pub visiveis no dashboard</li>
+        <li>Toggle "Link da live na descricao" nas configuracoes</li>
+        <li>Corte roda em thread separada - nao bloqueia publicacao</li>
+        <li>Changelog acessivel pelo numero da versao</li>
+      </ul>
+      <p style="color:var(--muted);margin-bottom:4px"><strong>Bugs corrigidos:</strong></p>
+      <ul style="margin:0 0 16px 20px;color:var(--text)">
+        <li>Fix crash no startup (UnboundLocalError config)</li>
+        <li>Fix flood de log do yt-dlp travando terminal (filtro a cada 10%)</li>
+        <li>Fix link da live na descricao retornando {video_id} literal</li>
+        <li>Fix minuto do horario nao carregando no dashboard</li>
+        <li>Fix publicacao perdida quando corte demorava</li>
+        <li>Services systemd apontando para diretorio correto</li>
+      </ul>
+
+      <h3 style="color:var(--accent);margin-bottom:8px">v3.2.0</h3>
+      <ul style="margin:0 0 16px 20px;color:var(--text)">
+        <li>Canais no header + painel de sync com filtros</li>
+      </ul>
+
+      <h3 style="color:var(--accent);margin-bottom:8px">v3.1.0</h3>
+      <ul style="margin:0 0 16px 20px;color:var(--text)">
+        <li>Config isolado por projeto + canal destino INEMA TIA</li>
+        <li>Fix carregamento .env + thumbnails doc</li>
+      </ul>
+    </div>
+  </div>
+</div>
 
 </body>
 </html>
