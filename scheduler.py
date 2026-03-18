@@ -14,6 +14,7 @@ import base64
 import tempfile
 import urllib.request
 import urllib.parse
+import threading
 from datetime import datetime
 
 # Config
@@ -697,8 +698,8 @@ def main():
     update_status('idle', 'Scheduler iniciado')
 
     # Roda cortes uma vez ao iniciar
-    current_minute = datetime.now().strftime('%H:%M')
     config = None
+    corte_running = threading.Event()
     try:
         config = load_config()
         cortes_paused = config.get('pipeline_cortes_paused', 'false') == 'true'
@@ -711,45 +712,54 @@ def main():
         log(f'ERRO no corte inicial: {e}')
 
     # Rastreia qual horario agendado ja foi executado (evita repetir)
-    # No startup, marca o horario atual como executado para nao disparar imediatamente
     startup_corte = get_matching_schedule(config.get('corte_horarios', '')) if config else None
     startup_pub = get_matching_schedule(config.get('pub_horarios', '')) if config else None
     last_executed = {'cortes': startup_corte, 'pub': startup_pub}
     log(f'  Agendamento: cortes={startup_corte or "nenhum agora"}, pub={startup_pub or "nenhum agora"}')
 
+    def run_cortes_thread(cfg):
+        """Roda cortes em thread separada para nao bloquear publicacao."""
+        try:
+            corte_running.set()
+            process_cortes(cfg)
+        except Exception as e:
+            log(f'ERRO no corte (thread): {e}')
+        finally:
+            corte_running.clear()
+
     while True:
         try:
             config = load_config()
 
-            # Captura matches ANTES de executar (corte pode demorar e perder o minuto)
+            # --- Cortes (roda em thread separada) ---
             cortes_paused = config.get('pipeline_cortes_paused', 'false') == 'true'
             corte_auto = config.get('corte_auto', 'true') == 'true'
             corte_horarios = config.get('corte_horarios', '')
             corte_match = get_matching_schedule(corte_horarios)
 
+            if not cortes_paused and corte_auto and corte_match:
+                if last_executed['cortes'] != corte_match:
+                    if not corte_running.is_set():
+                        last_executed['cortes'] = corte_match
+                        log(f'==> Hora de cortar! (agendado: {corte_match})')
+                        threading.Thread(target=run_cortes_thread, args=(config,), daemon=True).start()
+                    else:
+                        log(f'==> Corte agendado ({corte_match}) mas outro corte ainda esta rodando, pulando')
+
+            if not corte_match and last_executed['cortes']:
+                last_executed['cortes'] = None
+
+            # --- Publicacao (roda no loop principal, nao bloqueia) ---
             pub_paused = config.get('pipeline_pub_paused', 'false') == 'true'
             pub_horarios = config.get('pub_horarios', '')
             pub_match = get_matching_schedule(pub_horarios)
 
-            # --- Cortes ---
-            if not cortes_paused and corte_auto and corte_match:
-                if last_executed['cortes'] != corte_match:
-                    last_executed['cortes'] = corte_match
-                    log(f'==> Hora de cortar! (agendado: {corte_match})')
-                    process_cortes(config)
-
-            # Reset quando sai do horario
-            if not corte_match and last_executed['cortes']:
-                last_executed['cortes'] = None
-
-            # --- Publicacao ---
             if not pub_paused and pub_match:
                 if last_executed['pub'] != pub_match:
                     last_executed['pub'] = pub_match
                     log(f'==> Hora de publicar! (agendado: {pub_match})')
                     process_publicacao(config)
 
-            # Reset quando sai do horario
             if not pub_match and last_executed['pub']:
                 last_executed['pub'] = None
 
