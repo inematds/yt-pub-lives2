@@ -657,9 +657,7 @@
       <button id="btnCortes" onclick="togglePipeline('cortes')" class="danger small">Parar Cortes</button>
       <button id="btnPub" onclick="togglePipeline('pub')" class="danger small">Parar Publicacao</button>
       <button class="secondary" onclick="toggleConfig()">Configuracoes</button>
-      <button onclick="quickSync()" id="btnSync">Sincronizar Lives</button>
-      <button class="secondary small" onclick="toggleSyncPanel()" title="Sync avancado com filtros">Sync Avancado</button>
-      <button class="small" id="btnAutoSync" onclick="toggleAutoSync()" title="Sync automatico a meia-noite">Auto-sync: -</button>
+      <button onclick="toggleSyncPanel()" id="btnSync">Sincronizar Lives</button>
     </div>
   </header>
 
@@ -667,6 +665,11 @@
   <div class="config-panel" id="syncPanel" style="display:none;margin-bottom:16px">
     <div class="config-section">
       <h3>Sincronizar Lives do Canal de Origem</h3>
+      <div style="display:flex;gap:12px;align-items:center;margin-bottom:14px">
+        <button onclick="quickSync()" id="btnQuickSync">Sync Rapido (tudo que falta)</button>
+        <button class="small" id="btnAutoSync" onclick="toggleAutoSync()" title="Sync automatico a meia-noite">Auto-sync: -</button>
+      </div>
+      <h4 style="color:var(--muted);margin-bottom:8px;font-size:0.85em">Sync avancado com filtros</h4>
       <div class="config-grid" style="grid-template-columns: 1fr 1fr 1fr 1fr auto;">
         <div class="config-field">
           <label>Modo</label>
@@ -1857,7 +1860,7 @@ function toggleSyncPanel() {
 }
 
 async function quickSync() {
-  const btn = document.getElementById('btnSync');
+  const btn = document.getElementById('btnQuickSync');
   btn.disabled = true;
   btn.innerHTML = '<span class="spinner"></span>Sincronizando...';
 
@@ -1869,12 +1872,13 @@ async function quickSync() {
     });
     const msg = `${data.novas_lives} novas lives adicionadas. ${data.ja_existentes} ja existiam.`;
     showToast(msg);
+    document.getElementById('syncResult').textContent = msg;
     await loadAll();
   } catch (e) {
     showToast('Erro ao sincronizar: ' + e.message, 'error');
   } finally {
     btn.disabled = false;
-    btn.textContent = 'Sincronizar Lives';
+    btn.textContent = 'Sync Rapido (tudo que falta)';
   }
 }
 
