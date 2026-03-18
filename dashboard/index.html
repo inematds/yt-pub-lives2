@@ -731,6 +731,11 @@
         </div>
         <div class="hour-picker" id="corteHourPicker"></div>
         <div class="hour-summary" id="corteSummary"></div>
+        <div style="margin-top:8px;display:flex;align-items:center;gap:8px;">
+          <label style="font-size:0.85em;color:var(--muted)">Minuto exato:</label>
+          <input type="number" id="cfgCorteMinuto" min="0" max="59" value="0" style="width:60px">
+          <span style="font-size:0.8em;color:var(--muted)">Ex: 30 → roda em HH:30</span>
+        </div>
       </div>
     </div>
 
@@ -762,6 +767,11 @@
         </div>
         <div class="hour-picker" id="pubHourPicker"></div>
         <div class="hour-summary" id="pubSummary"></div>
+        <div style="margin-top:8px;display:flex;align-items:center;gap:8px;">
+          <label style="font-size:0.85em;color:var(--muted)">Minuto exato:</label>
+          <input type="number" id="cfgPubMinuto" min="0" max="59" value="0" style="width:60px">
+          <span style="font-size:0.8em;color:var(--muted)">Ex: 15 → roda em HH:15</span>
+        </div>
       </div>
     </div>
 
@@ -1134,16 +1144,22 @@ function buildHourPicker(name) {
 function updateHourSummary(name) {
   const el = document.getElementById(name + 'Summary');
   const count = hourState[name].size;
+  const minutoEl = document.getElementById('cfg' + name.charAt(0).toUpperCase() + name.slice(1) + 'Minuto');
+  const minuto = String(minutoEl ? minutoEl.value : 0).padStart(2, '0');
   if (count === 0) {
     el.innerHTML = 'Nenhum horario selecionado';
   } else if (count === 24) {
-    el.innerHTML = '<strong>24x por dia</strong> — a cada hora';
+    el.innerHTML = `<strong>24x por dia</strong> — a cada hora no minuto :${minuto}`;
   } else {
     const sorted = [...hourState[name]].sort((a,b) => a-b);
-    const labels = sorted.map(h => String(h).padStart(2,'0') + ':00');
+    const labels = sorted.map(h => String(h).padStart(2,'0') + ':' + minuto);
     el.innerHTML = `<strong>${count}x por dia</strong> — ${labels.join(', ')}`;
   }
 }
+
+// Atualizar summary quando muda o minuto
+document.getElementById('cfgCorteMinuto').addEventListener('input', () => updateHourSummary('corte'));
+document.getElementById('cfgPubMinuto').addEventListener('input', () => updateHourSummary('pub'));
 
 function hourPickerSelectAll(name) {
   for (let h = 0; h < 24; h++) hourState[name].add(h);
@@ -1156,8 +1172,10 @@ function hourPickerClearAll(name) {
 }
 
 function hoursToString(name) {
+  const minutoEl = document.getElementById('cfg' + name.charAt(0).toUpperCase() + name.slice(1) + 'Minuto');
+  const minuto = String(minutoEl ? minutoEl.value : 0).padStart(2, '0');
   const sorted = [...hourState[name]].sort((a,b) => a-b);
-  return sorted.map(h => String(h).padStart(2,'0') + ':00').join(',');
+  return sorted.map(h => String(h).padStart(2,'0') + ':' + minuto).join(',');
 }
 
 function stringToHours(str) {
@@ -1588,6 +1606,7 @@ async function loadConfig() {
 
   // Publicacao
   if (c.privacy_padrao) document.getElementById('cfgPrivacy').value = c.privacy_padrao;
+  document.getElementById('cfgPubMinuto').value = c.pub_minuto || '0';
   hourState.pub = stringToHours(c.pub_horarios || '08:00,11:00,14:00,17:00');
   buildHourPicker('pub');
 
@@ -1597,6 +1616,7 @@ async function loadConfig() {
   // Cortes
   if (c.corte_auto) document.getElementById('cfgCorteAuto').value = c.corte_auto;
   if (c.corte_max_por_dia) document.getElementById('cfgCorteMax').value = c.corte_max_por_dia;
+  document.getElementById('cfgCorteMinuto').value = c.corte_minuto || '0';
   hourState.corte = stringToHours(c.corte_horarios || '06:00,18:00');
   buildHourPicker('corte');
 
@@ -1685,6 +1705,8 @@ async function saveConfig() {
     corte_horarios: hoursToString('corte'),
     corte_max_por_dia: document.getElementById('cfgCorteMax').value,
     pub_max_por_vez: document.getElementById('cfgPubMax').value,
+    pub_minuto: document.getElementById('cfgPubMinuto').value,
+    corte_minuto: document.getElementById('cfgCorteMinuto').value,
     ai_mode: document.getElementById('cfgAiMode').value,
     ai_model: document.getElementById('cfgAiModel').value,
     anthropic_api_key: document.getElementById('cfgAnthropicApiKey').value,
