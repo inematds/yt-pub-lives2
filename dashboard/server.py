@@ -560,6 +560,7 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                 pendentes += 1
 
         self.send_json(200, {
+            'instance_name': os.environ.get('INSTANCE_NAME', 'yt-pub-lives'),
             'total_lives': total_lives,
             'total_publicados': total_publicados,
             'lives_cortadas': cortados,
