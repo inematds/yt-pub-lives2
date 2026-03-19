@@ -217,6 +217,8 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             self.handle_live_reprocess(data)
         elif post_path == '/api/clip/pause':
             self.handle_clip_pause(data)
+        elif post_path == '/api/clip/delete-pending':
+            self.handle_clip_delete_pending(data)
         elif post_path == '/api/prompts':
             self.handle_api_prompts_save(data)
         elif post_path == '/api/cleanup/clips':
@@ -227,6 +229,10 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             self.handle_live_delete(data)
         elif post_path == '/api/thumbs/upload':
             self.handle_thumbs_upload(data)
+        elif post_path == '/api/clip/retry':
+            self.handle_clip_retry(data)
+        elif post_path == '/api/clip/dismiss-erro':
+            self.handle_clip_dismiss_erro(data)
         else:
             self.send_json(404, {'error': 'not found'})
 
@@ -506,6 +512,8 @@ class DashboardHandler(SimpleHTTPRequestHandler):
         for row in rows[1:]:  # skip header
             if len(row) >= 2:
                 config[row[0]] = row[1]
+            elif len(row) == 1:
+                config[row[0]] = ''
         self.send_json(200, {'config': config})
 
     def handle_api_prompts_get(self):
@@ -672,10 +680,18 @@ class DashboardHandler(SimpleHTTPRequestHandler):
         result = sheets_get('CONFIG!A1:B50')
         rows = result.get('values', [])
 
-        # Update values
+        # Track which keys were updated
+        existing_keys = set()
         for i, row in enumerate(rows):
-            if len(row) >= 1 and row[0] in data:
-                rows[i] = [row[0], str(data[row[0]])]
+            if len(row) >= 1:
+                existing_keys.add(row[0])
+                if row[0] in data:
+                    rows[i] = [row[0], str(data[row[0]])]
+
+        # Append new keys that don't exist yet
+        for key, val in data.items():
+            if key not in existing_keys:
+                rows.append([key, str(val)])
 
         sheets_update('CONFIG!A1:B' + str(len(rows)), rows)
         self.send_json(200, {'ok': True, 'updated': list(data.keys())})
@@ -867,6 +883,35 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             self.send_json(200, {'ok': True, 'paused': new_state})
         else:
             self.send_json(404, {'error': 'clip not found in manifest'})
+
+    def handle_clip_delete_pending(self, data):
+        """Remove a pending clip from clips_manifest.json."""
+        live_id = data.get('live_video_id', '')
+        title = data.get('title', '')
+        if not live_id or not title:
+            self.send_json(400, {'error': 'live_video_id and title required'})
+            return
+
+        lives_dir = os.environ.get('LIVES_DIR', os.path.join(PROJECT_ROOT, 'lives'))
+        manifest_path = os.path.join(lives_dir, live_id, 'clips_manifest.json')
+        if not os.path.exists(manifest_path):
+            self.send_json(404, {'error': 'manifest not found'})
+            return
+
+        with open(manifest_path) as f:
+            clips = json.load(f)
+
+        original_len = len(clips)
+        clips = [c for c in clips if c.get('title', '') != title]
+
+        if len(clips) == original_len:
+            self.send_json(404, {'error': 'clip not found in manifest'})
+            return
+
+        with open(manifest_path, 'w') as f:
+            json.dump(clips, f, ensure_ascii=False, indent=2)
+
+        self.send_json(200, {'ok': True, 'removed': original_len - len(clips)})
 
     def handle_cleanup_clips(self, data):
         """Deleta arquivos mp4 dos clips do disco. Mantem manifest e planilha."""
@@ -1060,6 +1105,140 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             'remaining': len(remaining),
             'error_details': error_details
         })
+
+
+    def handle_clip_retry(self, data):
+        """Remove erro_upload entry and re-publish the clip."""
+        live_id = data.get('live_video_id', '')
+        title = data.get('title', '')
+        if not live_id or not title:
+            self.send_json(400, {'error': 'live_video_id and title required'})
+            return
+
+        pub_result = sheets_get('PUBLICADOS!A1:J1000')
+        pub_rows = pub_result.get('values', [])
+        if len(pub_rows) < 2:
+            self.send_json(404, {'error': 'no publicados found'})
+            return
+
+        headers = pub_rows[0]
+        id_col = headers.index('clip_video_id') if 'clip_video_id' in headers else 0
+        title_col = headers.index('clip_titulo') if 'clip_titulo' in headers else 1
+
+        rows_to_clear = []
+        for i, row in enumerate(pub_rows[1:], 2):
+            vid = row[id_col] if len(row) > id_col else ''
+            t = row[title_col] if len(row) > title_col else ''
+            if vid in ('erro_upload', 'publicando', '') and t == title:
+                rows_to_clear.append(i)
+
+        if not rows_to_clear:
+            self.send_json(404, {'error': 'no erro_upload found for this clip'})
+            return
+
+        for row_num in rows_to_clear:
+            clear_range = f'PUBLICADOS!A{row_num}:J{row_num}'
+            token = get_access_token()
+            url = f'https://sheets.googleapis.com/v4/spreadsheets/{SPREADSHEET_ID}/values/{urllib.parse.quote(clear_range)}:clear'
+            req = urllib.request.Request(url, data=b'{}', method='POST')
+            req.add_header('Authorization', f'Bearer {token}')
+            req.add_header('Content-Type', 'application/json')
+            urllib.request.urlopen(req)
+
+        lives_dir = os.environ.get('LIVES_DIR', os.path.join(PROJECT_ROOT, 'lives'))
+        manifest_path = os.path.join(lives_dir, live_id, 'clips_manifest.json')
+        if not os.path.exists(manifest_path):
+            self.send_json(404, {'error': 'manifest not found'})
+            return
+
+        with open(manifest_path) as f:
+            clips = json.load(f)
+
+        clip = next((c for c in clips if c.get('title') == title), None)
+        if not clip:
+            self.send_json(404, {'error': 'clip not found in manifest'})
+            return
+
+        if not os.path.exists(clip['file']):
+            self.send_json(404, {'error': f'clip file not found: {clip["file"]}'})
+            return
+
+        import threading
+        def do_retry():
+            sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
+            from scheduler import run_publicacao, load_config, handle_thumbnail, refine_pub_with_ai, update_status
+
+            config = load_config()
+            privacy = config.get('privacy_padrao', 'unlisted')
+
+            clip_title = clip['title']
+            clip_desc = clip.get('description', '')
+            clip_title, clip_desc = refine_pub_with_ai(clip_title, clip_desc, config, video_id=live_id)
+
+            if config.get('pub_link_live', 'true') == 'true':
+                clip_desc += f'\n\nLive original: https://www.youtube.com/watch?v={live_id}'
+
+            update_status('publicando', f'Retry: {clip_title[:50]}', live_id, step='upload', clip_title=clip_title[:50])
+            new_vid = run_publicacao(live_id, clip['file'], clip_title, clip_desc, ','.join(clip.get('tags', [])), privacy)
+
+            from datetime import datetime
+            now = datetime.now().strftime('%Y-%m-%d %H:%M')
+
+            if new_vid:
+                handle_thumbnail(new_vid, clip_title, clip.get('description', ''), config)
+                sheets_append('PUBLICADOS!A1', [[
+                    new_vid, clip['title'],
+                    f'https://www.youtube.com/watch?v={new_vid}',
+                    live_id, '', now, privacy,
+                    str(clip.get('duration', '')),
+                    ','.join(clip.get('tags', [])), '27'
+                ]])
+                update_status('idle', f'Retry OK: {clip_title[:50]}')
+            else:
+                sheets_append('PUBLICADOS!A1', [[
+                    'erro_upload', clip['title'],
+                    '', live_id, '', now, privacy,
+                    str(clip.get('duration', '')),
+                    ','.join(clip.get('tags', [])), '27'
+                ]])
+                update_status('idle', f'Retry falhou: {clip_title[:50]}')
+
+        threading.Thread(target=do_retry, daemon=True).start()
+        self.send_json(200, {'ok': True, 'message': f'Republicacao de "{title[:50]}" iniciada'})
+
+    def handle_clip_dismiss_erro(self, data):
+        """Remove erro_upload entries so clip becomes pendente again."""
+        live_id = data.get('live_video_id', '')
+        title = data.get('title', '')
+        if not live_id or not title:
+            self.send_json(400, {'error': 'live_video_id and title required'})
+            return
+
+        pub_result = sheets_get('PUBLICADOS!A1:J1000')
+        pub_rows = pub_result.get('values', [])
+        if len(pub_rows) < 2:
+            self.send_json(404, {'error': 'no publicados'})
+            return
+
+        headers = pub_rows[0]
+        id_col = headers.index('clip_video_id') if 'clip_video_id' in headers else 0
+        title_col = headers.index('clip_titulo') if 'clip_titulo' in headers else 1
+
+        cleared = 0
+        for i, row in enumerate(pub_rows[1:], 2):
+            vid = row[id_col] if len(row) > id_col else ''
+            t = row[title_col] if len(row) > title_col else ''
+            if vid in ('erro_upload', 'publicando', '') and t == title:
+                clear_range = f'PUBLICADOS!A{i}:J{i}'
+                token = get_access_token()
+                url = f'https://sheets.googleapis.com/v4/spreadsheets/{SPREADSHEET_ID}/values/{urllib.parse.quote(clear_range)}:clear'
+                req = urllib.request.Request(url, data=b'{}', method='POST')
+                req.add_header('Authorization', f'Bearer {token}')
+                req.add_header('Content-Type', 'application/json')
+                urllib.request.urlopen(req)
+                cleared += 1
+
+        self.send_json(200, {'ok': True, 'cleared': cleared})
 
 
 def parse_duration_minutes(iso_duration):

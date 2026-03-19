@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>yt-pub-lives2 v3.8.11 - Lives & Clips Dashboard</title>
+<title>yt-pub-lives2 v3.9.13 - Lives & Clips Dashboard</title>
 <style>
   :root {
     --bg: #0f1117;
@@ -319,9 +319,31 @@
     color: var(--accent);
     transition: all 0.2s;
     user-select: none;
+    position: relative;
+    display: inline-block;
   }
   .privacy-toggle:hover { background: rgba(99,102,241,0.25); }
   .privacy-toggle.saving { opacity: 0.5; pointer-events: none; }
+
+  .privacy-dropdown {
+    z-index: 9999;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+    overflow: hidden;
+    min-width: 100px;
+    margin-top: 4px;
+  }
+  .privacy-dropdown div {
+    padding: 6px 12px;
+    font-size: 0.75rem;
+    cursor: pointer;
+    color: var(--text);
+    white-space: nowrap;
+  }
+  .privacy-dropdown div:hover { background: rgba(99,102,241,0.15); }
+  .privacy-dropdown div.active { color: var(--accent); font-weight: 600; }
 
   /* Toolbar filters */
   .toolbar {
@@ -650,7 +672,7 @@
 
 <div class="container">
   <header>
-    <h1><span>GWS</span> Lives & Clips <small style="font-size:0.5em;color:var(--muted)">- yt-pub-lives2 <a href="#" onclick="openModal('modalChangelog');return false" style="color:var(--accent);text-decoration:none" title="Ver changelog">v3.8.11</a></small>
+    <h1><span>GWS</span> Lives & Clips <small style="font-size:0.5em;color:var(--muted)">- yt-pub-lives2 <a href="#" onclick="openModal('modalChangelog');return false" style="color:var(--accent);text-decoration:none" title="Ver changelog">v3.9.13</a></small>
       <span id="headerCanais" style="display:block;font-size:0.4em;font-weight:normal;margin-top:4px"></span>
     </h1>
     <div class="header-actions">
@@ -857,7 +879,7 @@
     <!-- API Keys -->
     <div class="config-section">
       <h3>API Keys</h3>
-      <div class="config-grid" style="grid-template-columns: 1fr 1fr 1fr;">
+      <div class="config-grid" style="grid-template-columns: 1fr 1fr 1fr 1fr;">
         <div class="config-field">
           <label>Anthropic (Claude)</label>
           <input type="password" id="cfgAnthropicApiKey" placeholder="sk-ant-...">
@@ -872,6 +894,11 @@
           <label>OpenRouter</label>
           <input type="password" id="cfgOpenrouterApiKey" placeholder="sk-or-...">
           <div class="hint">Para modelos alternativos</div>
+        </div>
+        <div class="config-field">
+          <label>Kie.ai (Imagens)</label>
+          <input type="password" id="cfgKieApiKey" placeholder="abc123...">
+          <div class="hint">Para geracao de imagens (GPT-4o, Flux)</div>
         </div>
       </div>
     </div>
@@ -911,15 +938,53 @@
           </select>
         </div>
         <div class="config-field">
-          <label>Modelo de Imagem</label>
-          <select id="cfgThumbModel">
-            <option value="dreamshaper">dreamshaper</option>
-            <option value="flux2-klein-4b">flux2-klein-4b</option>
-            <option value="lucid-origin">lucid-origin</option>
-            <option value="qwen-image">qwen-image</option>
-            <option value="sdxl-lite">sdxl-lite</option>
-            <option value="z-image-turbo">z-image-turbo</option>
+          <label>Provider de Imagem</label>
+          <select id="cfgThumbImageProvider">
+            <option value="piramyd">Piramyd</option>
+            <option value="kie">Kie.ai</option>
           </select>
+        </div>
+      </div>
+      <div class="config-grid" style="grid-template-columns: 1fr 1fr; margin-top:8px;">
+        <div class="config-field">
+          <label>Modelo de Imagem</label>
+          <input type="text" id="cfgThumbModel" placeholder="ex: dreamshaper, gpt4o-image, flux-kontext-pro">
+          <div class="hint">Piramyd: dreamshaper, flux2-klein-4b, sdxl-lite | Kie: google/nano-banana, gpt4o-image, flux-kontext-pro</div>
+        </div>
+      </div>
+      <div style="margin-top:12px;padding:10px;background:rgba(99,102,241,0.06);border:1px solid var(--border);border-radius:8px;">
+        <label style="font-weight:600;font-size:0.8rem;margin-bottom:8px;display:block;">LLM para gerar prompt (tenta na ordem, fallback local se todos falharem)</label>
+        <div class="config-grid" style="grid-template-columns: auto 1fr auto 1fr auto 1fr; gap:8px; align-items:center;">
+          <span style="font-size:0.75rem;color:var(--muted);font-weight:600;">1.</span>
+          <select id="cfgThumbLlm1Provider" style="padding:4px 8px;font-size:0.8rem;">
+            <option value="">--</option>
+            <option value="claude-oauth">Claude OAuth</option>
+            <option value="anthropic">Anthropic API</option>
+            <option value="openrouter">OpenRouter</option>
+            <option value="piramyd">Piramyd</option>
+          </select>
+          <span style="font-size:0.75rem;color:var(--muted);font-weight:600;">2.</span>
+          <select id="cfgThumbLlm2Provider" style="padding:4px 8px;font-size:0.8rem;">
+            <option value="">--</option>
+            <option value="claude-oauth">Claude OAuth</option>
+            <option value="anthropic">Anthropic API</option>
+            <option value="openrouter">OpenRouter</option>
+            <option value="piramyd">Piramyd</option>
+          </select>
+          <span style="font-size:0.75rem;color:var(--muted);font-weight:600;">3.</span>
+          <select id="cfgThumbLlm3Provider" style="padding:4px 8px;font-size:0.8rem;">
+            <option value="">--</option>
+            <option value="claude-oauth">Claude OAuth</option>
+            <option value="anthropic">Anthropic API</option>
+            <option value="openrouter">OpenRouter</option>
+            <option value="piramyd">Piramyd</option>
+          </select>
+          <span></span>
+          <input type="text" id="cfgThumbLlm1Model" placeholder="(nao precisa para OAuth)" style="padding:4px 8px;font-size:0.8rem;">
+          <span></span>
+          <input type="text" id="cfgThumbLlm2Model" value="google/gemini-2.5-flash-lite" placeholder="google/gemini-2.5-flash-lite" style="padding:4px 8px;font-size:0.8rem;">
+          <span></span>
+          <input type="text" id="cfgThumbLlm3Model" value="Gemini-2.5-Flash-Preview" placeholder="Gemini-2.5-Flash-Preview" style="padding:4px 8px;font-size:0.8rem;">
         </div>
       </div>
       <div class="config-grid" style="grid-template-columns: 1fr 1fr 1fr; margin-top:12px;">
@@ -1082,6 +1147,7 @@
       <select id="pubStatus" onchange="clipsPage=1;filterPubs()">
         <option value="">Todos</option>
         <option value="publicado">Publicados</option>
+        <option value="erro">Erros</option>
         <option value="pendente">Pendentes</option>
         <option value="parado">Parados</option>
       </select>
@@ -1114,12 +1180,13 @@
             <th>Live</th>
             <th>Data / Tempo</th>
             <th>Privacy</th>
+            <th>Link</th>
             <th>Arquivo</th>
             <th>Tags</th>
           </tr>
       </thead>
       <tbody id="pubBody">
-        <tr><td colspan="7" class="empty">Carregando...</td></tr>
+        <tr><td colspan="8" class="empty">Carregando...</td></tr>
       </tbody>
     </table>
     <div class="pagination" id="clipsPagination"></div>
@@ -1579,7 +1646,10 @@ function filterPubs() {
 
   if (statusFilter !== 'pendente' && statusFilter !== 'parado') {
     allPublicados.forEach(p => {
-      all.push({...p, _status: 'publicado', _title: p.clip_titulo, _tags: p.tags || ''});
+      const isErro = ['erro_upload', 'publicando', ''].includes(p.clip_video_id);
+      const st = isErro ? 'erro' : 'publicado';
+      if (statusFilter && statusFilter !== st) return;
+      all.push({...p, _status: st, _title: p.clip_titulo, _tags: p.tags || ''});
     });
   }
 
@@ -1623,27 +1693,46 @@ function filterPubs() {
   renderPagination('clipsPagination', clipsPage, totalPages, p => { clipsPage = p; filterPubs(); });
 
   if (paged.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="7" class="empty">Nenhum clip encontrado.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="8" class="empty">Nenhum clip encontrado.</td></tr>';
     return;
   }
 
   tbody.innerHTML = paged.map(p => {
     const fileLink = p.filename && p.live_video_id
-      ? `<a href="/clips/${p.live_video_id}/${encodeURIComponent(p.filename)}" target="_blank" title="${p.filename}">▶</a>`
+      ? `<a href="/clips/${p.live_video_id}/${encodeURIComponent(p.filename)}" target="_blank" title="${p.filename}" style="font-size:1.2em">&#9654;</a>`
       : '-';
 
-    if (p._status === 'publicado') {
+    if (p._status === 'erro') {
+      return `<tr style="opacity:0.8">
+        <td><span class="badge erro">erro</span></td>
+        <td title="${escapeHtml(p.clip_titulo)}">${escapeHtml(p.clip_titulo)}</td>
+        <td><a href="javascript:void(0)" onclick="goToLive('${p.live_video_id}')">${p.live_video_id}</a></td>
+        <td>${p.data_publicacao || '-'}</td>
+        <td><button class="small" style="background:var(--accent)" onclick="retryClip('${p.live_video_id}', '${escapeHtml(p.clip_titulo).replace(/'/g,"\\'")}', this)">republicar</button> <button class="small btn-delete" style="opacity:1" onclick="dismissErro('${p.live_video_id}', '${escapeHtml(p.clip_titulo).replace(/'/g,"\\'")}', this)" title="Remover erro">x</button></td>
+        <td><span style="color:var(--red);font-size:0.75em">${p.clip_video_id}</span></td>
+        <td>${fileLink}</td>
+        <td>${p.tags || '-'}</td>
+      </tr>`;
+    } else if (p._status === 'publicado') {
+      const hasValidUrl = p.clip_url && p.clip_url.startsWith('http');
+      const statusBadge = hasValidUrl
+        ? `<a href="${p.clip_url}" target="_blank"><span class="badge concluido">publicado</span></a>`
+        : `<span class="badge pendente" title="Sem link de publicacao valido">sem link</span>`;
+      const pubLink = hasValidUrl
+        ? `<a href="${p.clip_url}" target="_blank" style="color:var(--blue);font-size:0.75em" title="${p.clip_url}">&#128279; abrir</a>`
+        : `<span style="color:var(--muted);font-size:0.75em">-</span>`;
       return `<tr>
-        <td><a href="${p.clip_url}" target="_blank"><span class="badge concluido">publicado</span></a></td>
+        <td>${statusBadge}</td>
         <td title="${escapeHtml(p.clip_titulo)}">${escapeHtml(p.clip_titulo)}</td>
         <td><a href="javascript:void(0)" onclick="goToLive('${p.live_video_id}')">${p.live_video_id}</a></td>
         <td>${p.data_publicacao}</td>
-        <td><span class="privacy-toggle" onclick="cyclePrivacy(this, '${p.clip_video_id}')" title="Clique para mudar">${p.privacy}</span></td>
-        <td>${fileLink}</td>
         <td>
-          ${p.tags || '-'}
-          <button class="small btn-delete" onclick="deleteClip('${p.clip_video_id}', '${escapeHtml(p.clip_titulo).replace(/'/g,"\\'")}', this)" title="Excluir clip">x</button>
+          <span class="privacy-toggle" onclick="showPrivacyDropdown(this, '${p.clip_video_id}')" title="Clique para mudar">${p.privacy}</span>
+          <button class="small btn-delete" onclick="deleteClip('${p.clip_video_id}', '${escapeHtml(p.clip_titulo).replace(/'/g,"\\'")}', this)" title="Excluir clip" style="opacity:1">x</button>
         </td>
+        <td>${pubLink}</td>
+        <td>${fileLink}</td>
+        <td>${p.tags || '-'}</td>
       </tr>`;
     } else {
       const isPaused = p._status === 'parado';
@@ -1654,7 +1743,11 @@ function filterPubs() {
         <td title="${escapeHtml(p.title)}">${escapeHtml(p.title)}</td>
         <td><a href="javascript:void(0)" onclick="goToLive('${p.live_video_id}')">${p.live_video_id}</a></td>
         <td>${p.start} → ${p.end}</td>
-        <td>-</td>
+        <td>
+          <span style="color:var(--muted);font-size:0.75em">-</span>
+          <button class="small btn-delete" onclick="deletePendingClip('${p.live_video_id}', '${escapeHtml(p.title).replace(/'/g,"\\'")}', this)" title="Excluir clip pendente" style="opacity:1">x</button>
+        </td>
+        <td><span style="color:var(--muted);font-size:0.75em">-</span></td>
         <td>${fileLink}</td>
         <td>${p._tags || '-'}</td>
       </tr>`;
@@ -1716,6 +1809,7 @@ async function loadConfig() {
   if (c.anthropic_api_key) document.getElementById('cfgAnthropicApiKey').value = c.anthropic_api_key;
   if (c.thumb_api_key) document.getElementById('cfgThumbApiKey').value = c.thumb_api_key;
   if (c.openrouter_api_key) document.getElementById('cfgOpenrouterApiKey').value = c.openrouter_api_key;
+  if (c.kie_api_key) document.getElementById('cfgKieApiKey').value = c.kie_api_key;
 
   // Analise IA
   if (c.ai_mode) document.getElementById('cfgAiMode').value = c.ai_mode;
@@ -1723,7 +1817,13 @@ async function loadConfig() {
 
   // Thumbnails
   if (c.thumb_mode) document.getElementById('cfgThumbMode').value = c.thumb_mode;
+  if (c.thumb_image_provider) document.getElementById('cfgThumbImageProvider').value = c.thumb_image_provider;
   if (c.thumb_model) document.getElementById('cfgThumbModel').value = c.thumb_model;
+  // LLM chain
+  for (let i = 1; i <= 3; i++) {
+    if (c[`thumb_llm_${i}_provider`]) document.getElementById(`cfgThumbLlm${i}Provider`).value = c[`thumb_llm_${i}_provider`];
+    if (c[`thumb_llm_${i}_model`]) document.getElementById(`cfgThumbLlm${i}Model`).value = c[`thumb_llm_${i}_model`];
+  }
   if (c.thumb_text_position) document.getElementById('cfgThumbTextPosition').value = c.thumb_text_position;
   if (c.thumb_font_size) document.getElementById('cfgThumbFontSize').value = c.thumb_font_size;
   if (c.thumb_brand) document.getElementById('cfgThumbBrand').value = c.thumb_brand;
@@ -1807,14 +1907,22 @@ async function saveConfig() {
     anthropic_api_key: document.getElementById('cfgAnthropicApiKey').value,
     thumb_api_key: document.getElementById('cfgThumbApiKey').value,
     openrouter_api_key: document.getElementById('cfgOpenrouterApiKey').value,
+    kie_api_key: document.getElementById('cfgKieApiKey').value,
     thumb_mode: document.getElementById('cfgThumbMode').value,
+    thumb_image_provider: document.getElementById('cfgThumbImageProvider').value,
     thumb_model: document.getElementById('cfgThumbModel').value,
     thumb_text_position: document.getElementById('cfgThumbTextPosition').value,
     thumb_font_size: document.getElementById('cfgThumbFontSize').value,
     thumb_brand: document.getElementById('cfgThumbBrand').value,
     thumb_text_color: document.getElementById('cfgThumbTextColor').value,
     thumb_accent_color: document.getElementById('cfgThumbAccentColor').value,
-    thumb_brand_color: document.getElementById('cfgThumbBrandColor').value
+    thumb_brand_color: document.getElementById('cfgThumbBrandColor').value,
+    thumb_llm_1_provider: document.getElementById('cfgThumbLlm1Provider').value,
+    thumb_llm_1_model: document.getElementById('cfgThumbLlm1Model').value,
+    thumb_llm_2_provider: document.getElementById('cfgThumbLlm2Provider').value,
+    thumb_llm_2_model: document.getElementById('cfgThumbLlm2Model').value,
+    thumb_llm_3_provider: document.getElementById('cfgThumbLlm3Provider').value,
+    thumb_llm_3_model: document.getElementById('cfgThumbLlm3Model').value
   };
 
   try {
@@ -2124,33 +2232,111 @@ checkHealth();
 // --- Privacy cycle & Delete ---
 const privacyOrder = ['unlisted', 'public', 'private'];
 
-async function cyclePrivacy(el, clipId) {
-  const current = el.textContent.trim();
-  const idx = privacyOrder.indexOf(current);
-  const next = privacyOrder[(idx + 1) % privacyOrder.length];
+function showPrivacyDropdown(el, clipId) {
+  // Close any existing dropdown
+  document.querySelectorAll('.privacy-dropdown').forEach(d => d.remove());
 
-  el.classList.add('saving');
-  el.textContent = next + '...';
+  const current = el.textContent.trim();
+  const dd = document.createElement('div');
+  dd.className = 'privacy-dropdown';
+  dd.innerHTML = privacyOrder.map(opt =>
+    `<div class="${opt === current ? 'active' : ''}" onclick="selectPrivacy(this, '${clipId}', '${opt}', '${el.id || ''}')">${opt}</div>`
+  ).join('');
+
+  // Posicionar no body para evitar overflow da tabela
+  const rect = el.getBoundingClientRect();
+  dd.style.position = 'fixed';
+  dd.style.top = (rect.bottom + 4) + 'px';
+  dd.style.left = rect.left + 'px';
+  dd._toggleEl = el;
+  document.body.appendChild(dd);
+
+  // Close on click outside
+  setTimeout(() => {
+    document.addEventListener('click', function handler(e) {
+      if (!dd.contains(e.target) && e.target !== el) { dd.remove(); document.removeEventListener('click', handler); }
+    });
+  }, 0);
+}
+
+async function selectPrivacy(optEl, clipId, newPrivacy) {
+  const dd = optEl.closest('.privacy-dropdown');
+  const toggle = dd._toggleEl;
+  dd.remove();
+
+  if (!toggle) return;
+  const current = toggle.textContent.trim();
+  if (newPrivacy === current) return;
+
+  toggle.classList.add('saving');
+  toggle.textContent = newPrivacy + '...';
 
   try {
     const resp = await fetchJson('/api/clip/privacy', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({clip_video_id: clipId, privacy: next})
+      body: JSON.stringify({clip_video_id: clipId, privacy: newPrivacy})
     });
 
     if (resp.ok) {
-      el.textContent = next;
-      showToast(`Privacy de ${clipId} alterado para ${next}`);
+      toggle.textContent = newPrivacy;
+      showToast(`Privacy de ${clipId} alterado para ${newPrivacy}`);
     } else {
-      el.textContent = current;
+      toggle.textContent = current;
       showToast('Erro ao alterar privacy', 'error');
     }
   } catch (e) {
-    el.textContent = current;
+    toggle.textContent = current;
     showToast('Erro: ' + e.message, 'error');
   }
-  el.classList.remove('saving');
+  toggle.classList.remove('saving');
+}
+
+async function retryClip(liveId, titulo, btn) {
+  if (!confirm(`Republicar "${titulo}"?`)) return;
+  btn.disabled = true;
+  btn.textContent = '...';
+  try {
+    const resp = await fetchJson('/api/clip/retry', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({live_video_id: liveId, title: titulo})
+    });
+    if (resp.ok) {
+      showToast(resp.message || 'Republicacao iniciada');
+      setTimeout(() => { loadPublicados(currentPubFilter); loadStats(); }, 3000);
+    } else {
+      showToast('Erro: ' + (resp.error || 'desconhecido'), 'error');
+    }
+  } catch (e) {
+    showToast('Erro: ' + e.message, 'error');
+  }
+  btn.disabled = false;
+  btn.textContent = 'republicar';
+}
+
+async function dismissErro(liveId, titulo, btn) {
+  if (!confirm(`Remover registro de erro de "${titulo}"? O clip voltara a ser pendente.`)) return;
+  btn.disabled = true;
+  btn.textContent = '...';
+  try {
+    const resp = await fetchJson('/api/clip/dismiss-erro', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({live_video_id: liveId, title: titulo})
+    });
+    if (resp.ok) {
+      btn.closest('tr').remove();
+      showToast('Erro removido, clip voltou a pendente');
+      loadStats();
+    } else {
+      showToast('Erro: ' + (resp.error || 'desconhecido'), 'error');
+    }
+  } catch (e) {
+    showToast('Erro: ' + e.message, 'error');
+  }
+  btn.disabled = false;
+  btn.textContent = 'x';
 }
 
 async function deleteClip(clipId, titulo, btn) {
@@ -2172,6 +2358,35 @@ async function deleteClip(clipId, titulo, btn) {
       loadStats();
     } else {
       showToast('Erro ao excluir', 'error');
+      btn.disabled = false;
+      btn.textContent = 'x';
+    }
+  } catch (e) {
+    showToast('Erro: ' + e.message, 'error');
+    btn.disabled = false;
+    btn.textContent = 'x';
+  }
+}
+
+async function deletePendingClip(liveId, titulo, btn) {
+  if (!confirm(`Excluir clip pendente "${titulo}" da live ${liveId}?`)) return;
+
+  btn.disabled = true;
+  btn.textContent = '...';
+
+  try {
+    const resp = await fetchJson('/api/clip/delete-pending', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({live_video_id: liveId, title: titulo})
+    });
+
+    if (resp.ok) {
+      btn.closest('tr').remove();
+      showToast(`Clip pendente excluido`);
+      loadStats();
+    } else {
+      showToast('Erro ao excluir: ' + (resp.error || 'desconhecido'), 'error');
       btn.disabled = false;
       btn.textContent = 'x';
     }
@@ -2268,9 +2483,17 @@ loadAll();
       <button onclick="closeModal('modalChangelog')" style="background:none;border:none;color:var(--muted);font-size:1.2em;cursor:pointer">X</button>
     </div>
     <div class="modal-body" style="padding:16px;overflow-y:auto;font-size:0.85em;line-height:1.8">
-      <h3 style="color:var(--accent);margin-bottom:8px">v3.8.11</h3>
+      <h3 style="color:var(--accent);margin-bottom:8px">v3.9.13</h3>
+      <ul style="margin:0 0 16px 20px;color:var(--text)">
+        <li>Painel clips: coluna Link mostra URL real da publicacao no YouTube</li>
+        <li>Botao excluir ao lado da privacy (sempre visivel)</li>
+        <li>Icone arquivo mudou de pasta para play (▶)</li>
+        <li>Excluir clips pendentes (remove do manifest)</li>
+      </ul>
+      <h3 style="color:var(--accent);margin-bottom:8px">v3.9.12</h3>
       <p style="color:var(--muted);margin-bottom:4px"><strong>Features:</strong></p>
       <ul style="margin:0 0 8px 20px;color:var(--text)">
+        <li>Lock na planilha: marca "publicando" antes de enviar, evita duplicatas entre processos</li>
         <li>Health bar - status do sistema (yt-dlp, Sheets, APIs, YouTube, Scheduler)</li>
         <li>Proximos horarios de corte/pub visiveis no dashboard</li>
         <li>Toggle "Link da live na descricao" nas configuracoes</li>
@@ -2281,6 +2504,7 @@ loadAll();
       </ul>
       <p style="color:var(--muted);margin-bottom:4px"><strong>Bugs corrigidos:</strong></p>
       <ul style="margin:0 0 16px 20px;color:var(--text)">
+        <li>Fix contador clips_publicados contando em dobro</li>
         <li>Fix crash no startup (UnboundLocalError config)</li>
         <li>Fix flood de log do yt-dlp travando terminal (filtro a cada 10%)</li>
         <li>Fix link da live na descricao retornando {video_id} literal</li>

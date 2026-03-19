@@ -114,7 +114,7 @@ def sheets_update(range_str, values):
 
 def load_config():
     """Le CONFIG da planilha e retorna dict."""
-    result = sheets_get('CONFIG!A1:B20')
+    result = sheets_get('CONFIG!A1:B50')
     rows = result.get('values', [])
     config = {}
     for row in rows[1:]:
@@ -395,6 +395,27 @@ def handle_thumbnail(video_id, title, description, config):
             if api_key:
                 os.environ['PIRAMYD_API_KEY'] = api_key
             os.environ['THUMB_MODEL'] = model
+            # Image provider
+            img_provider = config.get('thumb_image_provider', 'piramyd')
+            os.environ['THUMB_IMAGE_PROVIDER'] = img_provider
+            kie_key = config.get('kie_api_key', '')
+            if kie_key:
+                os.environ['KIE_API_KEY'] = kie_key
+            # API keys dos providers
+            or_key = config.get('openrouter_api_key', '')
+            if or_key:
+                os.environ['OPENROUTER_API_KEY'] = or_key
+            ant_key = config.get('anthropic_api_key', '')
+            if ant_key:
+                os.environ['ANTHROPIC_API_KEY'] = ant_key
+            # LLM chain (3 tentativas)
+            for i in range(1, 4):
+                p = config.get(f'thumb_llm_{i}_provider', '')
+                m = config.get(f'thumb_llm_{i}_model', '')
+                if p:
+                    os.environ[f'THUMB_LLM_{i}_PROVIDER'] = p
+                if m:
+                    os.environ[f'THUMB_LLM_{i}_MODEL'] = m
             # Visual settings
             for key in ('thumb_font_size', 'thumb_text_color', 'thumb_accent_color',
                         'thumb_brand_color', 'thumb_text_position', 'thumb_brand'):
@@ -435,7 +456,7 @@ def handle_thumbnail(video_id, title, description, config):
                 font = ImageFont.load_default()
 
             # Wrap and draw title text
-            words = title[:60].upper().split()
+            words = title[:70].upper().split()
             lines, current = [], ''
             for word in words:
                 test = (current + ' ' + word).strip()
@@ -595,19 +616,25 @@ def _process_publicacao_inner(config):
         with open(manifest_file) as f:
             clips = json.load(f)
 
-        # Check which clips are already published
+        # Check which clips are already published (ignore erro_upload/publicando)
         pub_result = sheets_get('PUBLICADOS!A1:J1000')
         pub_rows = pub_result.get('values', [])
         published_titles = set()
+        erro_titles = set()
         if len(pub_rows) > 1:
             pub_headers = pub_rows[0]
+            id_col = pub_headers.index('clip_video_id') if 'clip_video_id' in pub_headers else 0
             title_col = pub_headers.index('clip_titulo') if 'clip_titulo' in pub_headers else 1
             for row in pub_rows[1:]:
                 if len(row) > title_col:
-                    published_titles.add(row[title_col])
+                    vid_status = row[id_col] if len(row) > id_col else ''
+                    if vid_status in ('erro_upload', 'publicando', ''):
+                        erro_titles.add(row[title_col])
+                    else:
+                        published_titles.add(row[title_col])
 
         count = 0
-        log(f'  {len(clips)} clips no manifest, {len(published_titles)} ja publicados')
+        log(f'  {len(clips)} clips no manifest, {len(published_titles)} publicados OK, {len(erro_titles)} com erro (retry manual)')
         for clip in clips:
             if count >= max_por_vez:
                 log(f'  Limite de {max_por_vez} clips por vez atingido')
@@ -615,6 +642,10 @@ def _process_publicacao_inner(config):
 
             if clip['title'] in published_titles:
                 log(f'  Ja publicado: {clip["title"][:50]}')
+                continue
+
+            if clip['title'] in erro_titles:
+                log(f'  Erro anterior (retry manual): {clip["title"][:50]}')
                 continue
 
             if clip.get('paused', False):
@@ -627,6 +658,34 @@ def _process_publicacao_inner(config):
 
             clip_title = clip['title']
             clip_desc = clip.get('description', '')
+
+            # Lock na planilha: marcar como "publicando" ANTES de iniciar
+            now = datetime.now().strftime('%Y-%m-%d %H:%M')
+            lock_token = get_access_token()
+            lock_encoded = urllib.parse.quote('PUBLICADOS!A1')
+            lock_url = f'https://sheets.googleapis.com/v4/spreadsheets/{SPREADSHEET_ID}/values/{lock_encoded}:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS'
+            lock_body = json.dumps({
+                'range': 'PUBLICADOS!A1',
+                'majorDimension': 'ROWS',
+                'values': [[
+                    'publicando', clip['title'],
+                    '', vid, live.get('titulo', ''),
+                    now, privacy,
+                    str(clip.get('duration', '')),
+                    ','.join(clip.get('tags', [])),
+                    '27'
+                ]]
+            }).encode()
+            lock_req = urllib.request.Request(lock_url, data=lock_body, method='POST')
+            lock_req.add_header('Authorization', f'Bearer {lock_token}')
+            lock_req.add_header('Content-Type', 'application/json')
+            try:
+                lock_resp = json.loads(urllib.request.urlopen(lock_req).read())
+                lock_range = lock_resp.get('updates', {}).get('updatedRange', '')
+                log(f'  Reservado na planilha: {clip["title"][:50]}')
+            except Exception as e:
+                log(f'  Erro ao reservar na planilha: {e}, pulando clip')
+                continue
 
             # Refinar titulo e descricao com IA
             update_status('publicando', f'Refinando com IA: {clip_title[:50]}', vid, step='refine', clip_title=clip_title[:50])
@@ -651,40 +710,63 @@ def _process_publicacao_inner(config):
                     clip.get('description', ''), config
                 )
 
-                # Add to PUBLICADOS sheet
-                now = datetime.now().strftime('%Y-%m-%d %H:%M')
-                # Direct append
-                token = get_access_token()
-                encoded = urllib.parse.quote('PUBLICADOS!A1')
-                url = f'https://sheets.googleapis.com/v4/spreadsheets/{SPREADSHEET_ID}/values/{encoded}:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS'
-                body_data = json.dumps({
-                    'range': 'PUBLICADOS!A1',
-                    'majorDimension': 'ROWS',
-                    'values': [[
-                        new_vid, clip['title'],
-                        f'https://www.youtube.com/watch?v={new_vid}',
-                        vid, live.get('titulo', ''),
-                        now, privacy,
-                        str(clip.get('duration', '')),
-                        ','.join(clip.get('tags', [])),
-                        '27'
-                    ]]
-                }).encode()
-                req = urllib.request.Request(url, data=body_data, method='POST')
-                req.add_header('Authorization', f'Bearer {token}')
-                req.add_header('Content-Type', 'application/json')
+                # Atualizar linha na planilha: "publicando" -> video_id real
                 try:
-                    urllib.request.urlopen(req)
+                    import re as _re
+                    lock_match = _re.search(r'!A(\d+)', lock_range)
+                    if lock_match:
+                        lock_row = int(lock_match.group(1))
+                        update_range = f'PUBLICADOS!A{lock_row}:C{lock_row}'
+                        update_token = get_access_token()
+                        update_encoded = urllib.parse.quote(update_range)
+                        update_url = f'https://sheets.googleapis.com/v4/spreadsheets/{SPREADSHEET_ID}/values/{update_encoded}?valueInputOption=RAW'
+                        update_body = json.dumps({
+                            'range': update_range,
+                            'majorDimension': 'ROWS',
+                            'values': [[
+                                new_vid, clip['title'],
+                                f'https://www.youtube.com/watch?v={new_vid}'
+                            ]]
+                        }).encode()
+                        update_req = urllib.request.Request(update_url, data=update_body, method='PUT')
+                        update_req.add_header('Authorization', f'Bearer {update_token}')
+                        update_req.add_header('Content-Type', 'application/json')
+                        urllib.request.urlopen(update_req)
                 except Exception as e:
-                    log(f'  Erro ao gravar na planilha: {e}')
+                    log(f'  Erro ao atualizar planilha: {e}')
 
                 count += 1
                 published_titles.add(clip['title'])
                 log(f'  Publicado: {clip["title"][:50]} -> {new_vid}')
+            else:
+                # Upload falhou: remover linha de lock
+                try:
+                    import re as _re
+                    lock_match = _re.search(r'!A(\d+)', lock_range)
+                    if lock_match:
+                        lock_row = int(lock_match.group(1))
+                        # Limpar a linha (marcar como erro)
+                        err_range = f'PUBLICADOS!A{lock_row}'
+                        err_token = get_access_token()
+                        err_encoded = urllib.parse.quote(err_range)
+                        err_url = f'https://sheets.googleapis.com/v4/spreadsheets/{SPREADSHEET_ID}/values/{err_encoded}?valueInputOption=RAW'
+                        err_body = json.dumps({
+                            'range': err_range,
+                            'majorDimension': 'ROWS',
+                            'values': [['erro_upload']]
+                        }).encode()
+                        err_req = urllib.request.Request(err_url, data=err_body, method='PUT')
+                        err_req.add_header('Authorization', f'Bearer {err_token}')
+                        err_req.add_header('Content-Type', 'application/json')
+                        urllib.request.urlopen(err_req)
+                except Exception as e:
+                    log(f'  Erro ao limpar lock na planilha: {e}')
+                count += 1  # tentativa conta como 1, independente do resultado
+                log(f'  Falha ao publicar: {clip["title"][:50]}')
 
         # Update counter if clips were published OR if counter is out of sync
         actual_published = sum(1 for c in clips if c['title'] in published_titles)
-        new_total = actual_published + count
+        new_total = actual_published
         if new_total != publicados:
             row_num = live['_row']
             orig_row = list(all_rows[row_num - 1]) if row_num - 1 < len(all_rows) else []
@@ -692,9 +774,8 @@ def _process_publicacao_inner(config):
             log(f'  Atualizado clips_publicados: {publicados} -> {new_total} para {vid}')
 
         if count > 0:
-            log(f'  {count} clips publicados para {vid}')
-            update_status('idle', f'{count} clips publicados para {vid}')
-            # Only break after actually publishing to avoid quota issues
+            log(f'  {count} tentativa(s) para {vid}')
+            update_status('idle', f'Publicacao concluida para {vid}')
             break
 
     if not found_any:
@@ -798,5 +879,21 @@ def main():
         time.sleep(60)
 
 
+def acquire_lock():
+    """Garante que apenas 1 instancia do scheduler rode por projeto."""
+    import fcntl
+    lock_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), '.scheduler.lock')
+    lock_file = open(lock_path, 'w')
+    try:
+        fcntl.flock(lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        lock_file.write(str(os.getpid()))
+        lock_file.flush()
+        return lock_file  # manter aberto enquanto o processo roda
+    except OSError:
+        print(f'[ERRO] Outro scheduler ja esta rodando (lock: {lock_path}). Saindo.', file=sys.stderr)
+        sys.exit(1)
+
+
 if __name__ == '__main__':
+    _lock = acquire_lock()
     main()
