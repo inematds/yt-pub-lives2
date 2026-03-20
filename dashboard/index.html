@@ -905,35 +905,18 @@
       <!-- Analise IA -->
       <div class="config-section">
         <h3>Analise de Cortes (IA)</h3>
-        <div class="config-grid" style="grid-template-columns: 1fr 1fr;">
+        <div class="config-grid" style="grid-template-columns: 1fr;">
           <div class="config-field">
             <label>Modo de Analise</label>
-            <select id="cfgAiMode">
+            <select id="cfgAiMode" onchange="updateAiFields()">
               <option value="claude-api">Claude CLI (OAuth)</option>
               <option value="anthropic-api">Anthropic API Key</option>
               <option value="openrouter-api">OpenRouter API</option>
               <option value="piramyd-api">Piramyd API</option>
             </select>
-            <div class="hint">Qual provider usar para analisar topicos</div>
-          </div>
-          <div class="config-field">
-            <label>Modelo de Analise</label>
-            <input type="text" id="cfgAiModel" placeholder="claude-sonnet-4-20250514">
-            <div class="hint">Modelo usado na analise (depende do provider)</div>
           </div>
         </div>
-        <div class="config-grid" style="grid-template-columns: 1fr 1fr; margin-top:8px;">
-          <div class="config-field">
-            <label>API Key Anthropic</label>
-            <input type="password" id="cfgAnthropicApiKey" placeholder="sk-ant-...">
-            <div class="hint">Necessaria para modo Anthropic API Key</div>
-          </div>
-          <div class="config-field">
-            <label>API Key OpenRouter</label>
-            <input type="password" id="cfgOpenrouterApiKey" placeholder="sk-or-...">
-            <div class="hint">Necessaria para modo OpenRouter</div>
-          </div>
-        </div>
+        <div id="aiFieldsExtra" class="config-grid" style="grid-template-columns: 1fr 1fr; margin-top:8px;"></div>
       </div>
 
       <!-- Thumbnails -->
@@ -950,7 +933,7 @@
           </div>
           <div class="config-field">
             <label>Provider de Imagem</label>
-            <select id="cfgThumbImageProvider">
+            <select id="cfgThumbImageProvider" onchange="updateThumbFields()">
               <option value="piramyd">Piramyd</option>
               <option value="kie">Kie.ai</option>
               <option value="minimax">MiniMax</option>
@@ -958,25 +941,13 @@
             </select>
           </div>
         </div>
-        <div class="config-grid" style="grid-template-columns: 1fr 1fr; margin-top:8px;">
-          <div class="config-field">
-            <label>Modelo de Imagem</label>
-            <input type="text" id="cfgThumbModel" placeholder="ex: dreamshaper, gpt4o-image, flux-kontext-pro">
-            <div class="hint">Piramyd: dreamshaper, flux2-klein-4b, sdxl-lite | Kie: google/nano-banana, gpt4o-image, flux-kontext-pro</div>
-          </div>
-        </div>
-        <div class="config-grid" style="grid-template-columns: 1fr 1fr; margin-top:8px;">
-          <div class="config-field">
-            <label>API Key Piramyd</label>
-            <input type="password" id="cfgThumbApiKey" placeholder="sk-...">
-            <div class="hint">Para Piramyd (imagens e LLM)</div>
-          </div>
-          <div class="config-field">
-            <label>API Key Kie.ai</label>
-            <input type="password" id="cfgKieApiKey" placeholder="abc123...">
-            <div class="hint">Para Kie.ai (GPT-4o, Flux)</div>
-          </div>
-        </div>
+        <div id="thumbFieldsExtra" class="config-grid" style="grid-template-columns: 1fr 1fr; margin-top:8px;"></div>
+        <!-- Hidden inputs to preserve values -->
+        <input type="hidden" id="cfgAnthropicApiKey">
+        <input type="hidden" id="cfgOpenrouterApiKey">
+        <input type="hidden" id="cfgThumbApiKey">
+        <input type="hidden" id="cfgKieApiKey">
+        <input type="hidden" id="cfgAiModel">
         <div style="margin-top:12px;padding:10px;background:rgba(99,102,241,0.06);border:1px solid var(--border);border-radius:8px;">
           <label style="font-weight:600;font-size:0.8rem;margin-bottom:8px;display:block;">LLM para gerar prompt (tenta na ordem, fallback local se todos falharem)</label>
           <div class="config-grid" style="grid-template-columns: auto 1fr auto 1fr auto 1fr; gap:8px; align-items:center;">
@@ -1325,6 +1296,79 @@ function saveActiveTab(btn) {
   if (_activeConfigTab === 'horarios') saveHorarios(btn);
   else if (_activeConfigTab === 'apis') saveApis(btn);
   else if (_activeConfigTab === 'prompts') savePrompts(btn);
+}
+
+// --- Dynamic API fields ---
+function updateAiFields() {
+  const mode = document.getElementById('cfgAiMode').value;
+  const container = document.getElementById('aiFieldsExtra');
+  const modelH = document.getElementById('cfgAiModel');
+  const anthH = document.getElementById('cfgAnthropicApiKey');
+  const orH = document.getElementById('cfgOpenrouterApiKey');
+  const thumbH = document.getElementById('cfgThumbApiKey');
+
+  if (mode === 'claude-api') {
+    container.innerHTML = '<div class="config-field"><div class="hint" style="padding:8px 0">Claude CLI usa OAuth, sem necessidade de API key</div></div>';
+    return;
+  }
+
+  const keyMap = {
+    'anthropic-api': {id: 'cfgAnthropicApiKey', label: 'API Key Anthropic', placeholder: 'sk-ant-...', src: anthH},
+    'openrouter-api': {id: 'cfgOpenrouterApiKey', label: 'API Key OpenRouter', placeholder: 'sk-or-...', src: orH},
+    'piramyd-api': {id: 'cfgThumbApiKey', label: 'API Key Piramyd', placeholder: 'sk-...', src: thumbH}
+  };
+  const k = keyMap[mode];
+  const keyVal = k.src.value || '';
+  const modelVal = modelH.value || '';
+
+  container.innerHTML = `
+    <div class="config-field">
+      <label>Modelo de Analise</label>
+      <input type="text" id="_aiModel" value="${modelVal}" placeholder="claude-sonnet-4-20250514" oninput="document.getElementById('cfgAiModel').value=this.value">
+    </div>
+    <div class="config-field">
+      <label>${k.label}</label>
+      <input type="password" id="_aiKey" value="${keyVal}" placeholder="${k.placeholder}" oninput="document.getElementById('${k.id}').value=this.value">
+    </div>`;
+}
+
+function updateThumbFields() {
+  const provider = document.getElementById('cfgThumbImageProvider').value;
+  const container = document.getElementById('thumbFieldsExtra');
+  const thumbH = document.getElementById('cfgThumbApiKey');
+  const kieH = document.getElementById('cfgKieApiKey');
+
+  const providerMap = {
+    'piramyd': {id: 'cfgThumbApiKey', label: 'API Key Piramyd', placeholder: 'sk-...', src: thumbH,
+      models: 'dreamshaper, flux2-klein-4b, sdxl-lite, flux-schnell'},
+    'kie': {id: 'cfgKieApiKey', label: 'API Key Kie.ai', placeholder: 'abc123...', src: kieH,
+      models: 'gpt4o-image, flux-kontext-pro, google/nano-banana'},
+    'minimax': {id: '', label: '', placeholder: '', src: null,
+      models: 'image-01 (unico modelo)'},
+    'google': {id: '', label: '', placeholder: '', src: null,
+      models: 'imagen-4.0-fast-generate-001, imagen-4.0-generate-001'}
+  };
+  const p = providerMap[provider] || providerMap['piramyd'];
+  const modelEl = document.getElementById('cfgThumbModel');
+  const modelVal = modelEl ? modelEl.value : '';
+
+  let html = `<div class="config-field">
+    <label>Modelo de Imagem</label>
+    <input type="text" id="cfgThumbModel" value="${modelVal}" placeholder="modelo...">
+    <div class="hint">${p.models}</div>
+  </div>`;
+
+  if (p.id && p.src) {
+    const keyVal = p.src.value || '';
+    html += `<div class="config-field">
+      <label>${p.label}</label>
+      <input type="password" value="${keyVal}" placeholder="${p.placeholder}" oninput="document.getElementById('${p.id}').value=this.value">
+    </div>`;
+  } else {
+    html += '<div class="config-field"><div class="hint" style="padding:8px 0">Sem API key configuravel para este provider</div></div>';
+  }
+
+  container.innerHTML = html;
 }
 
 // --- Hour Picker ---
@@ -1908,11 +1952,13 @@ async function loadConfig() {
   // Analise IA
   if (c.ai_mode) document.getElementById('cfgAiMode').value = c.ai_mode;
   if (c.ai_model) document.getElementById('cfgAiModel').value = c.ai_model;
+  updateAiFields();
 
   // Thumbnails
   if (c.thumb_mode) document.getElementById('cfgThumbMode').value = c.thumb_mode;
   if (c.thumb_image_provider) document.getElementById('cfgThumbImageProvider').value = c.thumb_image_provider;
   if (c.thumb_model) document.getElementById('cfgThumbModel').value = c.thumb_model;
+  updateThumbFields();
   // LLM chain
   for (let i = 1; i <= 3; i++) {
     if (c[`thumb_llm_${i}_provider`]) document.getElementById(`cfgThumbLlm${i}Provider`).value = c[`thumb_llm_${i}_provider`];
