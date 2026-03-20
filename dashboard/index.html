@@ -902,33 +902,6 @@
 
     <!-- Tab: APIs & IA -->
     <div class="config-tab-content" id="cfgTab_apis">
-      <!-- API Keys -->
-      <div class="config-section">
-        <h3>API Keys</h3>
-        <div class="config-grid" style="grid-template-columns: 1fr 1fr 1fr 1fr;">
-          <div class="config-field">
-            <label>Anthropic (Claude)</label>
-            <input type="password" id="cfgAnthropicApiKey" placeholder="sk-ant-...">
-            <div class="hint">Para analise de cortes via API</div>
-          </div>
-          <div class="config-field">
-            <label>Piramyd (Imagens)</label>
-            <input type="password" id="cfgThumbApiKey" placeholder="sk-...">
-            <div class="hint">Para geracao de thumbnails</div>
-          </div>
-          <div class="config-field">
-            <label>OpenRouter</label>
-            <input type="password" id="cfgOpenrouterApiKey" placeholder="sk-or-...">
-            <div class="hint">Para modelos alternativos</div>
-          </div>
-          <div class="config-field">
-            <label>Kie.ai (Imagens)</label>
-            <input type="password" id="cfgKieApiKey" placeholder="abc123...">
-            <div class="hint">Para geracao de imagens (GPT-4o, Flux)</div>
-          </div>
-        </div>
-      </div>
-
       <!-- Analise IA -->
       <div class="config-section">
         <h3>Analise de Cortes (IA)</h3>
@@ -947,6 +920,18 @@
             <label>Modelo de Analise</label>
             <input type="text" id="cfgAiModel" placeholder="claude-sonnet-4-20250514">
             <div class="hint">Modelo usado na analise (depende do provider)</div>
+          </div>
+        </div>
+        <div class="config-grid" style="grid-template-columns: 1fr 1fr; margin-top:8px;">
+          <div class="config-field">
+            <label>API Key Anthropic</label>
+            <input type="password" id="cfgAnthropicApiKey" placeholder="sk-ant-...">
+            <div class="hint">Necessaria para modo Anthropic API Key</div>
+          </div>
+          <div class="config-field">
+            <label>API Key OpenRouter</label>
+            <input type="password" id="cfgOpenrouterApiKey" placeholder="sk-or-...">
+            <div class="hint">Necessaria para modo OpenRouter</div>
           </div>
         </div>
       </div>
@@ -978,6 +963,18 @@
             <label>Modelo de Imagem</label>
             <input type="text" id="cfgThumbModel" placeholder="ex: dreamshaper, gpt4o-image, flux-kontext-pro">
             <div class="hint">Piramyd: dreamshaper, flux2-klein-4b, sdxl-lite | Kie: google/nano-banana, gpt4o-image, flux-kontext-pro</div>
+          </div>
+        </div>
+        <div class="config-grid" style="grid-template-columns: 1fr 1fr; margin-top:8px;">
+          <div class="config-field">
+            <label>API Key Piramyd</label>
+            <input type="password" id="cfgThumbApiKey" placeholder="sk-...">
+            <div class="hint">Para Piramyd (imagens e LLM)</div>
+          </div>
+          <div class="config-field">
+            <label>API Key Kie.ai</label>
+            <input type="password" id="cfgKieApiKey" placeholder="abc123...">
+            <div class="hint">Para Kie.ai (GPT-4o, Flux)</div>
           </div>
         </div>
         <div style="margin-top:12px;padding:10px;background:rgba(99,102,241,0.06);border:1px solid var(--border);border-radius:8px;">
