@@ -1943,22 +1943,25 @@ async function loadConfig() {
   window._cfgPubHorarios = c.pub_horarios || '';
   updateNextSchedules();
 
-  // API Keys
-  if (c.anthropic_api_key) document.getElementById('cfgAnthropicApiKey').value = c.anthropic_api_key;
-  if (c.thumb_api_key) document.getElementById('cfgThumbApiKey').value = c.thumb_api_key;
-  if (c.openrouter_api_key) document.getElementById('cfgOpenrouterApiKey').value = c.openrouter_api_key;
-  if (c.kie_api_key) document.getElementById('cfgKieApiKey').value = c.kie_api_key;
+  // Helper para setar valor seguro
+  const setVal = (id, val) => { const el = document.getElementById(id); if (el && val) el.value = val; };
+
+  // API Keys (hidden inputs)
+  setVal('cfgAnthropicApiKey', c.anthropic_api_key);
+  setVal('cfgThumbApiKey', c.thumb_api_key);
+  setVal('cfgOpenrouterApiKey', c.openrouter_api_key);
+  setVal('cfgKieApiKey', c.kie_api_key);
 
   // Analise IA
-  if (c.ai_mode) document.getElementById('cfgAiMode').value = c.ai_mode;
-  if (c.ai_model) document.getElementById('cfgAiModel').value = c.ai_model;
+  setVal('cfgAiMode', c.ai_mode);
+  setVal('cfgAiModel', c.ai_model);
   updateAiFields();
 
   // Thumbnails
-  if (c.thumb_mode) document.getElementById('cfgThumbMode').value = c.thumb_mode;
-  if (c.thumb_image_provider) document.getElementById('cfgThumbImageProvider').value = c.thumb_image_provider;
-  if (c.thumb_model) document.getElementById('cfgThumbModel').value = c.thumb_model;
+  setVal('cfgThumbMode', c.thumb_mode);
+  setVal('cfgThumbImageProvider', c.thumb_image_provider);
   updateThumbFields();
+  setVal('cfgThumbModel', c.thumb_model);
   // LLM chain
   for (let i = 1; i <= 3; i++) {
     if (c[`thumb_llm_${i}_provider`]) document.getElementById(`cfgThumbLlm${i}Provider`).value = c[`thumb_llm_${i}_provider`];
