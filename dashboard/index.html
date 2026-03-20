@@ -1090,7 +1090,9 @@
   <!-- Tabs -->
   <div class="tabs" id="tabsBar">
     <button class="tab active" data-tab="lives" onclick="showTab('lives', this)">Lives</button>
-    <button class="tab" data-tab="publicados" onclick="showTab('publicados', this)">Clips</button>
+    <button class="tab" data-tab="publicados" onclick="showTab('publicados', this, 'publicado')">Publicados <span id="tabCountPub" style="font-size:0.8em;opacity:0.6"></span></button>
+    <button class="tab" data-tab="publicados" onclick="showTab('publicados', this, 'pendente')">Pendentes <span id="tabCountPend" style="font-size:0.8em;opacity:0.6"></span></button>
+    <button class="tab" data-tab="publicados" onclick="showTab('publicados', this, 'erro')">Erros <span id="tabCountErro" style="font-size:0.8em;opacity:0.6"></span></button>
   </div>
 
   <!-- Lives Toolbar + Table -->
@@ -1251,12 +1253,17 @@ function badge(status, opts = {}) {
   return `<span class="badge ${cls}${clickable}"${onclick}${title}>${status || 'pendente'}</span>`;
 }
 
-function showTab(name, btn) {
+function showTab(name, btn, statusFilter) {
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
   if (btn) btn.classList.add('active');
   else document.querySelector(`.tab[data-tab="${name}"]`).classList.add('active');
   document.getElementById('tabLives').style.display = name === 'lives' ? 'block' : 'none';
   document.getElementById('tabPublicados').style.display = name === 'publicados' ? 'block' : 'none';
+  if (name === 'publicados' && statusFilter) {
+    document.getElementById('pubStatus').value = statusFilter;
+    clipsPage = 1;
+    filterPubs();
+  }
 }
 
 function toggleConfig() {
@@ -1635,6 +1642,15 @@ async function loadPublicados(filterLiveId) {
   } else {
     filterBar.style.display = 'none';
   }
+
+  // Atualizar contadores das tabs
+  const pubCount = allPublicados.filter(p => !['erro_upload','publicando',''].includes(p.clip_video_id)).length;
+  const erroCount = allPublicados.filter(p => ['erro_upload','publicando',''].includes(p.clip_video_id)).length;
+  const pendCount = allPendentes.filter(p => !p.paused).length;
+  const el = (id, txt) => { const e = document.getElementById(id); if (e) e.textContent = txt; };
+  el('tabCountPub', pubCount ? `(${pubCount})` : '');
+  el('tabCountPend', pendCount ? `(${pendCount})` : '');
+  el('tabCountErro', erroCount ? `(${erroCount})` : '');
 
   filterPubs();
 }
