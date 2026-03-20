@@ -390,6 +390,12 @@ def handle_thumbnail(video_id, title, description, config):
             minimax_key = config.get('minimax_api_key', '')
             if minimax_key:
                 os.environ['MINIMAX_API_KEY'] = minimax_key
+            google_img_key = config.get('google_image_api_key', '')
+            if google_img_key:
+                os.environ['GOOGLE_IMAGE_API_KEY'] = google_img_key
+            google_img_model = config.get('google_image_model', '')
+            if google_img_model:
+                os.environ['GOOGLE_IMAGE_MODEL'] = google_img_model
             # API keys dos providers
             or_key = config.get('openrouter_api_key', '')
             if or_key:

@@ -244,6 +244,8 @@ KIE_API_KEY = os.environ.get('KIE_API_KEY', '')
 KIE_URL = 'https://api.kie.ai/api/v1'
 MINIMAX_API_KEY = os.environ.get('MINIMAX_API_KEY', '')
 MINIMAX_URL = 'https://api.minimax.io/v1'
+GOOGLE_API_KEY = os.environ.get('GOOGLE_IMAGE_API_KEY', '') or os.environ.get('GEMINI_API_KEY', '')
+GOOGLE_IMAGE_MODEL = os.environ.get('GOOGLE_IMAGE_MODEL', 'imagen-4.0-fast-generate-001')
 
 # Image provider config from env
 IMAGE_PROVIDER = os.environ.get('THUMB_IMAGE_PROVIDER', 'piramyd')
@@ -371,13 +373,39 @@ def _generate_image_minimax(image_prompt):
     return img_bytes
 
 
+def _generate_image_google(image_prompt):
+    """Gera imagem via Google Imagen API."""
+    import base64 as b64
+    model = GOOGLE_IMAGE_MODEL
+    payload = {
+        'instances': [{'prompt': image_prompt}],
+        'parameters': {'sampleCount': 1, 'aspectRatio': '16:9'}
+    }
+    body = json.dumps(payload).encode()
+    url = f'https://generativelanguage.googleapis.com/v1beta/models/{model}:predict?key={GOOGLE_API_KEY}'
+    req = urllib.request.Request(url, data=body)
+    req.add_header('Content-Type', 'application/json')
+
+    resp = urllib.request.urlopen(req, timeout=120)
+    result = json.loads(resp.read())
+    predictions = result.get('predictions', [])
+    if not predictions:
+        raise ValueError('Google Imagen nao retornou imagem')
+
+    img_bytes = b64.b64decode(predictions[0]['bytesBase64Encoded'])
+    return img_bytes
+
+
 def generate_ai_image(image_prompt):
     """Gera imagem usando o provider configurado."""
     provider = IMAGE_PROVIDER
     print(f'  [2/3] Gerando imagem com {provider}/{IMAGE_MODEL}...', flush=True)
 
-    if provider == 'minimax':
-        img_bytes = _generate_image_minimax(image_prompt)
+    if provider in ('minimax', 'google'):
+        if provider == 'minimax':
+            img_bytes = _generate_image_minimax(image_prompt)
+        else:
+            img_bytes = _generate_image_google(image_prompt)
         img = Image.open(io.BytesIO(img_bytes))
         img = img.resize((WIDTH, HEIGHT), Image.LANCZOS).convert('RGB')
         return img
