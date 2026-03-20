@@ -796,7 +796,7 @@
         <button class="config-tab" onclick="showConfigTab('prompts', this)">Prompts</button>
         <button class="config-tab" onclick="showConfigTab('manutencao', this)">Manutencao</button>
       </div>
-      <button onclick="saveConfig()" id="btnSaveTop" style="padding:6px 20px;">Salvar</button>
+      <button onclick="saveActiveTab(this)" id="btnSaveTop" style="padding:6px 20px;">Salvar</button>
     </div>
 
     <!-- Tab: Horarios -->
@@ -896,7 +896,7 @@
       </div>
 
       <div style="margin-top: 8px;">
-        <button onclick="saveConfig()" id="btnSave">Salvar Configuracoes</button>
+        <button onclick="saveHorarios(this)">Salvar Horarios</button>
       </div>
     </div>
 
@@ -1076,14 +1076,14 @@
       </div>
 
       <div style="margin-top: 8px;">
-        <button onclick="saveConfig()">Salvar Configuracoes</button>
+        <button onclick="saveApis(this)">Salvar APIs & IA</button>
       </div>
     </div>
 
     <!-- Tab: Prompts -->
     <div class="config-tab-content" id="cfgTab_prompts">
       <div style="margin-bottom: 12px;">
-        <button onclick="saveConfig()">Salvar Configuracoes</button>
+        <button onclick="savePrompts(this)">Salvar Prompts</button>
       </div>
       <div class="config-section">
         <h3>Prompts</h3>
@@ -1101,7 +1101,7 @@
         </div>
       </div>
       <div style="margin-top: 8px;">
-        <button onclick="saveConfig()">Salvar Configuracoes</button>
+        <button onclick="savePrompts(this)">Salvar Prompts</button>
       </div>
     </div>
 
@@ -1312,11 +1312,19 @@ function toggleConfig() {
   if (panel.classList.contains('visible')) loadPendingThumbs();
 }
 
+let _activeConfigTab = 'horarios';
 function showConfigTab(name, btn) {
+  _activeConfigTab = name;
   document.querySelectorAll('.config-tab').forEach(t => t.classList.remove('active'));
   document.querySelectorAll('.config-tab-content').forEach(t => t.classList.remove('active'));
   if (btn) btn.classList.add('active');
   document.getElementById('cfgTab_' + name).classList.add('active');
+}
+
+function saveActiveTab(btn) {
+  if (_activeConfigTab === 'horarios') saveHorarios(btn);
+  else if (_activeConfigTab === 'apis') saveApis(btn);
+  else if (_activeConfigTab === 'prompts') savePrompts(btn);
 }
 
 // --- Hour Picker ---
@@ -1955,80 +1963,84 @@ async function cleanupSources() {
   btn.disabled = false; btn.textContent = 'Limpar Originais';
 }
 
-async function saveConfig() {
-  const btn = document.getElementById('btnSave');
+async function _saveWithFeedback(btn, saveFn) {
+  if (!btn) btn = document.getElementById('btnSaveTop');
   btn.disabled = true;
   btn.innerHTML = '<span class="spinner"></span>Salvando...';
-
-  const data = {
-    pub_horarios: hoursToString('pub'),
-    privacy_padrao: document.getElementById('cfgPrivacy').value,
-    corte_auto: document.getElementById('cfgCorteAuto').value,
-    corte_horarios: hoursToString('corte'),
-    corte_max_por_dia: document.getElementById('cfgCorteMax').value,
-    pub_max_por_vez: document.getElementById('cfgPubMax').value,
-    pub_link_live: document.getElementById('cfgPubLinkLive').value,
-    pub_minuto: document.getElementById('cfgPubMinuto').value,
-    corte_minuto: document.getElementById('cfgCorteMinuto').value,
-    ai_mode: document.getElementById('cfgAiMode').value,
-    ai_model: document.getElementById('cfgAiModel').value,
-    anthropic_api_key: document.getElementById('cfgAnthropicApiKey').value,
-    thumb_api_key: document.getElementById('cfgThumbApiKey').value,
-    openrouter_api_key: document.getElementById('cfgOpenrouterApiKey').value,
-    kie_api_key: document.getElementById('cfgKieApiKey').value,
-    thumb_mode: document.getElementById('cfgThumbMode').value,
-    thumb_image_provider: document.getElementById('cfgThumbImageProvider').value,
-    thumb_model: document.getElementById('cfgThumbModel').value,
-    thumb_text_position: document.getElementById('cfgThumbTextPosition').value,
-    thumb_font_size: document.getElementById('cfgThumbFontSize').value,
-    thumb_brand: document.getElementById('cfgThumbBrand').value,
-    thumb_text_color: document.getElementById('cfgThumbTextColor').value,
-    thumb_accent_color: document.getElementById('cfgThumbAccentColor').value,
-    thumb_brand_color: document.getElementById('cfgThumbBrandColor').value,
-    thumb_llm_1_provider: document.getElementById('cfgThumbLlm1Provider').value,
-    thumb_llm_1_model: document.getElementById('cfgThumbLlm1Model').value,
-    thumb_llm_2_provider: document.getElementById('cfgThumbLlm2Provider').value,
-    thumb_llm_2_model: document.getElementById('cfgThumbLlm2Model').value,
-    thumb_llm_3_provider: document.getElementById('cfgThumbLlm3Provider').value,
-    thumb_llm_3_model: document.getElementById('cfgThumbLlm3Model').value
-  };
-
   try {
-    await fetchJson('/api/config', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify(data)
-    });
-
-    // Save prompts
-    await fetchJson('/api/prompts', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({
-        prompt_cortes: document.getElementById('cfgPromptCortes').value,
-        prompt_pub: document.getElementById('cfgPromptPub').value,
-        prompt_thumb: document.getElementById('cfgPromptThumb').value
-      })
-    });
-
+    await saveFn();
     btn.innerHTML = 'Salvo!';
     btn.className = 'saved';
-    setTimeout(() => {
-      btn.innerHTML = 'Salvar Configuracoes';
-      btn.className = '';
-      btn.style.background = '';
-      btn.disabled = false;
-    }, 2000);
+    setTimeout(() => { btn.innerHTML = 'Salvar'; btn.className = ''; btn.style.background = ''; btn.disabled = false; }, 2000);
   } catch (e) {
     btn.innerHTML = 'Erro ao salvar';
     btn.style.background = 'var(--red)';
-    setTimeout(() => {
-      btn.innerHTML = 'Salvar Configuracoes';
-      btn.style.background = '';
-      btn.disabled = false;
-    }, 2000);
+    setTimeout(() => { btn.innerHTML = 'Salvar'; btn.style.background = ''; btn.disabled = false; }, 2000);
   }
 }
+
+function saveHorarios(btn) {
+  _saveWithFeedback(btn, () => fetchJson('/api/config', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({
+      pub_horarios: hoursToString('pub'),
+      privacy_padrao: document.getElementById('cfgPrivacy').value,
+      corte_auto: document.getElementById('cfgCorteAuto').value,
+      corte_horarios: hoursToString('corte'),
+      corte_max_por_dia: document.getElementById('cfgCorteMax').value,
+      pub_max_por_vez: document.getElementById('cfgPubMax').value,
+      pub_link_live: document.getElementById('cfgPubLinkLive').value,
+      pub_minuto: document.getElementById('cfgPubMinuto').value,
+      corte_minuto: document.getElementById('cfgCorteMinuto').value
+    })
+  }));
+}
+
+function saveApis(btn) {
+  _saveWithFeedback(btn, () => fetchJson('/api/config', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({
+      ai_mode: document.getElementById('cfgAiMode').value,
+      ai_model: document.getElementById('cfgAiModel').value,
+      anthropic_api_key: document.getElementById('cfgAnthropicApiKey').value,
+      thumb_api_key: document.getElementById('cfgThumbApiKey').value,
+      openrouter_api_key: document.getElementById('cfgOpenrouterApiKey').value,
+      kie_api_key: document.getElementById('cfgKieApiKey').value,
+      thumb_mode: document.getElementById('cfgThumbMode').value,
+      thumb_image_provider: document.getElementById('cfgThumbImageProvider').value,
+      thumb_model: document.getElementById('cfgThumbModel').value,
+      thumb_text_position: document.getElementById('cfgThumbTextPosition').value,
+      thumb_font_size: document.getElementById('cfgThumbFontSize').value,
+      thumb_brand: document.getElementById('cfgThumbBrand').value,
+      thumb_text_color: document.getElementById('cfgThumbTextColor').value,
+      thumb_accent_color: document.getElementById('cfgThumbAccentColor').value,
+      thumb_brand_color: document.getElementById('cfgThumbBrandColor').value,
+      thumb_llm_1_provider: document.getElementById('cfgThumbLlm1Provider').value,
+      thumb_llm_1_model: document.getElementById('cfgThumbLlm1Model').value,
+      thumb_llm_2_provider: document.getElementById('cfgThumbLlm2Provider').value,
+      thumb_llm_2_model: document.getElementById('cfgThumbLlm2Model').value,
+      thumb_llm_3_provider: document.getElementById('cfgThumbLlm3Provider').value,
+      thumb_llm_3_model: document.getElementById('cfgThumbLlm3Model').value
+    })
+  }));
+}
+
+function savePrompts(btn) {
+  _saveWithFeedback(btn, () => fetchJson('/api/prompts', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({
+      prompt_cortes: document.getElementById('cfgPromptCortes').value,
+      prompt_pub: document.getElementById('cfgPromptPub').value,
+      prompt_thumb: document.getElementById('cfgPromptThumb').value
+    })
+  }));
+}
+
+// Retrocompat: saveConfig salva tudo
+async function saveConfig() { await saveHorarios(); await saveApis(); await savePrompts(); }
 
 function toggleSyncPanel() {
   const panel = document.getElementById('syncPanel');
