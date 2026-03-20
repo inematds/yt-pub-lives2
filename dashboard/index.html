@@ -1130,6 +1130,8 @@
   <!-- Tabs -->
   <div class="tabs" id="tabsBar">
     <button class="tab active" data-tab="lives" onclick="showTab('lives', this)">Lives</button>
+    <button class="tab" data-tab="lives" onclick="showTab('lives', this); showLivesView('ultimas')">Ultimas</button>
+    <button class="tab" data-tab="lives" onclick="showTab('lives', this); showLivesView('proximas')">Proximas</button>
     <button class="tab" data-tab="publicados" onclick="showTab('publicados', this, 'publicado')">Publicados <span id="tabCountPub" style="font-size:0.8em;opacity:0.6"></span></button>
     <button class="tab" data-tab="publicados" onclick="showTab('publicados', this, 'pendente')">Pendentes <span id="tabCountPend" style="font-size:0.8em;opacity:0.6"></span></button>
     <button class="tab" data-tab="publicados" onclick="showTab('publicados', this, 'erro')">Erros <span id="tabCountErro" style="font-size:0.8em;opacity:0.6"></span></button>
@@ -1163,11 +1165,11 @@
         <thead>
           <tr>
             <th>Video</th>
+            <th>Data Live</th>
             <th>Titulo</th>
-            <th>Data</th>
             <th>Duracao</th>
             <th>Cortes</th>
-            <th>Transcricao</th>
+            <th>Data Corte</th>
             <th>Clips</th>
             <th>Publicados</th>
             <th></th>
@@ -1587,6 +1589,21 @@ async function loadLives() {
   filterLives();
 }
 
+function showLivesView(view) {
+  // Ultimas: lives cortadas, ordenadas pela data de publicação mais recente
+  // Proximas: lives pendentes (sem corte), ordenadas pela data mais antiga
+  document.getElementById('livesSearch').value = '';
+  if (view === 'ultimas') {
+    document.getElementById('livesStatus').value = 'concluido';
+    document.getElementById('livesOrder').value = 'newest';
+  } else if (view === 'proximas') {
+    document.getElementById('livesStatus').value = 'pendente';
+    document.getElementById('livesOrder').value = 'oldest';
+  }
+  livesPage = 1;
+  filterLives();
+}
+
 function filterLives() {
   const search = (document.getElementById('livesSearch').value || '').toLowerCase();
   const status = document.getElementById('livesStatus').value;
@@ -1649,11 +1666,11 @@ function filterLives() {
     return `
     <tr>
       <td><a href="${l.url}" target="_blank">${l.video_id}</a></td>
+      <td>${l.data_live || '-'}</td>
       <td title="${escapeHtml(l.titulo)}">${escapeHtml(l.titulo)}</td>
-      <td>${l.data_live}</td>
       <td>${l.duracao_min ? l.duracao_min + ' min' : '-'}</td>
       <td>${cortesBadge}${reprocessBtn}</td>
-      <td>${transcBadge}</td>
+      <td>${l.data_publicacao || '-'}</td>
       <td style="cursor:pointer" onclick="goToClips('${l.video_id}')">${l.qtd_clips || '0'}</td>
       <td style="cursor:pointer" onclick="goToClips('${l.video_id}')"><span style="color:${parseInt(l.clips_publicados||0) > 0 ? (parseInt(l.clips_publicados||0) >= parseInt(l.qtd_clips||0) ? '#10b981' : '#f59e0b') : 'var(--muted)'}">${l.clips_publicados || '0'}</span></td>
       <td><span style="cursor:pointer;color:#ef4444;font-size:1.1em" onclick="deleteLiveFiles('${l.video_id}')" title="Deletar arquivos do disco">&#128465;</span></td>
