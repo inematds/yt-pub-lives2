@@ -572,10 +572,20 @@ class DashboardHandler(SimpleHTTPRequestHandler):
         """
         channel_id = os.environ.get('YOUTUBE_CHANNEL_ID', '')
         mode = data.get('mode', 'novas')
-        date_from = data.get('date_from', '')
-        date_to = data.get('date_to', '')
+        date_from = data.get('date_from', '').strip()
+        date_to = data.get('date_to', '').strip()
         max_lives = data.get('max_lives', 50)
         max_pages = (max_lives // 50) + 1
+
+        # Validar formato de data (YYYY-MM-DD)
+        import re as _re
+        date_pattern = _re.compile(r'^\d{4}-\d{2}-\d{2}$')
+        if date_from and not date_pattern.match(date_from):
+            self.send_json(400, {'error': f'Data inicio invalida: "{date_from}". Use formato YYYY-MM-DD (ex: 2025-01-01)'})
+            return
+        if date_to and not date_pattern.match(date_to):
+            self.send_json(400, {'error': f'Data fim invalida: "{date_to}". Use formato YYYY-MM-DD (ex: 2025-12-31)'})
+            return
 
         # Build date filters for YouTube API (ISO 8601)
         published_after = f'{date_from}T00:00:00Z' if date_from else None
