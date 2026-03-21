@@ -289,7 +289,7 @@ def _generate_image_kie(image_prompt):
         payload = {
             'model': model,
             'input': {
-                'prompt': image_prompt,
+                'prompt': image_prompt[:950],
                 'aspect_ratio': '16:9'
             }
         }
