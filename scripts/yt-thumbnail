@@ -286,10 +286,19 @@ def _generate_image_kie(image_prompt):
 
     # Modelos que usam /jobs/createTask (novo endpoint unificado)
     if model in ('z-image',):
+        # z-image tem limite de 1000 chars e funciona melhor com prompts curtos
+        short_prompt = image_prompt
+        if len(image_prompt) > 400:
+            # Extrair essencia: pegar ate o primeiro ponto da cena + cores
+            parts = image_prompt.split('. ')
+            short_prompt = '. '.join(parts[:3])[:400]
+            if not short_prompt.endswith('.'):
+                short_prompt += '.'
+            short_prompt += ' Photorealistic, cinematic, 16:9, no text in image.'
         payload = {
             'model': model,
             'input': {
-                'prompt': image_prompt[:950],
+                'prompt': short_prompt,
                 'aspect_ratio': '16:9'
             }
         }
