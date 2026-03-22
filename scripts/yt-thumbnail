@@ -228,6 +228,7 @@ def generate_prompt_json(title, description=''):
 def build_image_prompt(prompt_data):
     """Monta o prompt final para o gerador de imagem."""
     return (
+        f'IMPORTANT: DO NOT include any text, letters, words or writing in the image. '
         f'Professional YouTube thumbnail, photorealistic, cinematic lighting. '
         f'Scene: {prompt_data["cena_principal"]}. '
         f'Background: {prompt_data["fundo_tematico"]}. '
@@ -235,8 +236,8 @@ def build_image_prompt(prompt_data):
         f'Composition: {prompt_data["composicao"]}. '
         f'Style: Realistic photo with cinematic lighting, high contrast, dramatic shadows, '
         f'optimized for YouTube thumbnail. Aspect ratio 16:9. '
-        f'ABSOLUTELY NO TEXT, NO LETTERS, NO WORDS, NO WRITING IN THE IMAGE. '
-        f'Do not include: {prompt_data["negative_prompt"]}'
+        f'NO TEXT IN IMAGE. '
+        f'Do not include: text, letters, words, writing, {prompt_data["negative_prompt"]}'
     )
 
 
@@ -294,7 +295,7 @@ def _generate_image_kie(image_prompt):
             short_prompt = '. '.join(parts[:3])[:400]
             if not short_prompt.endswith('.'):
                 short_prompt += '.'
-            short_prompt += ' Photorealistic, cinematic, 16:9, no text in image.'
+            short_prompt += ' Photorealistic, cinematic, 16:9. DO NOT include any text, letters or words in the image.'
         payload = {
             'model': model,
             'input': {
