@@ -503,8 +503,12 @@ def compose_thumbnail(bg, frase_curta, cores_str, output_path):
     design_gradient = os.environ.get('DESIGN_GRADIENT', 'none')
     design_gradient_opacity = int(os.environ.get('DESIGN_GRADIENT_OPACITY', '140'))
     design_gradient_coverage = int(os.environ.get('DESIGN_GRADIENT_COVERAGE', '40'))
+    design_accent_color = hex_to_rgb(os.environ.get('DESIGN_ACCENT_COLOR', THUMB_ACCENT_COLOR))
     design_brand = os.environ.get('DESIGN_BRAND', BRAND)
+    design_brand_font = os.environ.get('DESIGN_BRAND_FONT', 'dejavu')
+    design_brand_size = int(os.environ.get('DESIGN_BRAND_SIZE', '26'))
     design_brand_color = hex_to_rgb(os.environ.get('DESIGN_BRAND_COLOR', THUMB_BRAND_COLOR))
+    design_brand_position = os.environ.get('DESIGN_BRAND_POSITION', 'bottom-left')
     design_position = os.environ.get('DESIGN_POSITION', THUMB_TEXT_POSITION)
 
     font_path = FONT_MAP.get(design_font, FONT_MAP['dejavu'])
@@ -641,21 +645,35 @@ def compose_thumbnail(bg, frase_curta, cores_str, output_path):
         draw.text((lx, y), line, font=cur_font, fill=color)
 
     # --- Accent line ---
-    accent_color = hex_to_rgb(THUMB_ACCENT_COLOR)
     accent_y = y_start + total_height + 8
-    draw.rectangle([x_start, accent_y, x_start + 250, accent_y + 5], fill=accent_color)
+    draw.rectangle([x_start, accent_y, x_start + 250, accent_y + 5], fill=design_accent_color)
 
     # --- Brand pill ---
-    brand_font = ImageFont.truetype(font_path, 26)
+    brand_font_path = FONT_MAP.get(design_brand_font, FONT_MAP['dejavu'])
+    if not os.path.exists(brand_font_path):
+        brand_font_path = FONT_MAP['dejavu']
+    brand_font = ImageFont.truetype(brand_font_path, design_brand_size)
     bbox = draw.textbbox((0, 0), design_brand, font=brand_font)
     brand_w = bbox[2] - bbox[0]
-    bx = WIDTH - brand_w - 45
-    by = HEIGHT - 55
+    brand_h = bbox[3] - bbox[1]
+
+    # Brand position
+    margin = 30
+    if 'right' in design_brand_position:
+        bx = WIDTH - brand_w - margin - 14
+    elif 'center' in design_brand_position:
+        bx = int((WIDTH - brand_w) / 2)
+    else:  # left (default)
+        bx = margin + 14
+    if 'top' in design_brand_position:
+        by = margin
+    else:  # bottom (default)
+        by = HEIGHT - brand_h - margin - 8
 
     bg_pill = Image.new('RGBA', (WIDTH, HEIGHT), (0, 0, 0, 0))
     pill_draw = ImageDraw.Draw(bg_pill)
     pill_draw.rounded_rectangle(
-        [bx - 14, by - 8, bx + brand_w + 14, by + 34],
+        [bx - 14, by - 8, bx + brand_w + 14, by + brand_h + 16],
         radius=8, fill=(0, 0, 0, 180)
     )
     bg = Image.alpha_composite(bg, bg_pill)
