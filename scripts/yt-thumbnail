@@ -504,6 +504,9 @@ def compose_thumbnail(bg, frase_curta, cores_str, output_path):
     design_gradient_opacity = int(os.environ.get('DESIGN_GRADIENT_OPACITY', '140'))
     design_gradient_coverage = int(os.environ.get('DESIGN_GRADIENT_COVERAGE', '40'))
     design_accent_color = hex_to_rgb(os.environ.get('DESIGN_ACCENT_COLOR', THUMB_ACCENT_COLOR))
+    design_accent_width = int(os.environ.get('DESIGN_ACCENT_WIDTH', '250'))
+    design_accent_height = int(os.environ.get('DESIGN_ACCENT_HEIGHT', '5'))
+    design_accent_gap = int(os.environ.get('DESIGN_ACCENT_GAP', '8'))
     design_brand = os.environ.get('DESIGN_BRAND', BRAND)
     design_brand_font = os.environ.get('DESIGN_BRAND_FONT', 'dejavu')
     design_brand_size = int(os.environ.get('DESIGN_BRAND_SIZE', '26'))
@@ -645,8 +648,8 @@ def compose_thumbnail(bg, frase_curta, cores_str, output_path):
         draw.text((lx, y), line, font=cur_font, fill=color)
 
     # --- Accent line ---
-    accent_y = y_start + total_height + 8
-    draw.rectangle([x_start, accent_y, x_start + 250, accent_y + 5], fill=design_accent_color)
+    accent_y = y_start + total_height + design_accent_gap
+    draw.rectangle([x_start, accent_y, x_start + design_accent_width, accent_y + design_accent_height], fill=design_accent_color)
 
     # --- Brand pill ---
     brand_font_path = FONT_MAP.get(design_brand_font, FONT_MAP['dejavu'])

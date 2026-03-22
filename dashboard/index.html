@@ -1231,6 +1231,21 @@
             </div>
             <div class="hint">Cor da linha decorativa abaixo do titulo</div>
           </div>
+          <div class="config-field">
+            <label>Largura accent (px)</label>
+            <input type="number" id="cfgDesignAccentWidth" value="250" min="50" max="800" step="10">
+            <div class="hint">Comprimento da linha accent</div>
+          </div>
+          <div class="config-field">
+            <label>Espessura accent (px)</label>
+            <input type="number" id="cfgDesignAccentHeight" value="5" min="1" max="20" step="1">
+            <div class="hint">Grossura da linha accent</div>
+          </div>
+          <div class="config-field">
+            <label>Distancia accent (px)</label>
+            <input type="number" id="cfgDesignAccentGap" value="8" min="0" max="40" step="2">
+            <div class="hint">Espaco entre o titulo e a linha accent</div>
+          </div>
         </div>
       </div>
 
@@ -1339,8 +1354,22 @@
         </div>
       </div>
 
-      <div style="margin-top: 8px;">
-        <button onclick="saveDesign(this)">Salvar Design</button>
+      <div class="config-section">
+        <h3>Preview</h3>
+        <div class="config-grid" style="grid-template-columns: 1fr 1fr; margin-bottom:8px;">
+          <div class="config-field">
+            <label>Texto de exemplo</label>
+            <input type="text" id="cfgDesignPreviewText" value="MULTIPLIQUE SEU LUCRO" placeholder="Texto para preview">
+            <div class="hint">Texto que aparece na preview (simula a frase_curta)</div>
+          </div>
+          <div style="display:flex;gap:8px;align-items:flex-end;">
+            <button onclick="previewDesign(this)" style="padding:8px 20px;background:var(--accent);">Preview</button>
+            <button onclick="saveDesign(this)">Salvar Design</button>
+          </div>
+        </div>
+        <div id="designPreviewBox" style="display:none;margin-top:8px;border:1px solid var(--border);border-radius:8px;overflow:hidden;max-width:640px;">
+          <img id="designPreviewImg" style="width:100%;display:block;" alt="Preview">
+        </div>
       </div>
     </div>
 
@@ -1623,37 +1652,53 @@ function updateThumbFields() {
   container.innerHTML = html;
 }
 
+function _getDesignData() {
+  const g = id => { const el = document.getElementById(id); return el ? el.value : ''; };
+  return {
+    design_font: g('cfgDesignFont'), design_font_size: g('cfgDesignFontSize'),
+    design_last_line_scale: g('cfgDesignLastLineScale'), design_line_height: g('cfgDesignLineHeight'),
+    design_tracking: g('cfgDesignTracking'), design_case: g('cfgDesignCase'),
+    design_text_color: g('cfgDesignTextColor'), design_highlight_color: g('cfgDesignHighlightColor'),
+    design_highlight_enabled: g('cfgDesignHighlightEnabled'), design_accent_color: g('cfgDesignAccentColor'),
+    design_accent_width: g('cfgDesignAccentWidth'), design_accent_height: g('cfgDesignAccentHeight'),
+    design_accent_gap: g('cfgDesignAccentGap'),
+    design_shadow_type: g('cfgDesignShadowType'), design_shadow_color: g('cfgDesignShadowColor'),
+    design_shadow_size: g('cfgDesignShadowSize'), design_shadow_opacity: g('cfgDesignShadowOpacity'),
+    design_gradient: g('cfgDesignGradient'), design_gradient_opacity: g('cfgDesignGradientOpacity'),
+    design_gradient_coverage: g('cfgDesignGradientCoverage'),
+    design_brand: g('cfgDesignBrand'), design_brand_font: g('cfgDesignBrandFont'),
+    design_brand_size: g('cfgDesignBrandSize'), design_brand_color: g('cfgDesignBrandColor'),
+    design_brand_position: g('cfgDesignBrandPosition'),
+    design_position: g('cfgDesignPosition'), design_fallback_preset: g('cfgDesignFallbackPreset')
+  };
+}
+
 function saveDesign(btn) {
   _saveWithFeedback(btn, () => fetchJson('/api/config', {
-    method: 'POST',
-    headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({
-      design_font: document.getElementById('cfgDesignFont').value,
-      design_font_size: document.getElementById('cfgDesignFontSize').value,
-      design_last_line_scale: document.getElementById('cfgDesignLastLineScale').value,
-      design_line_height: document.getElementById('cfgDesignLineHeight').value,
-      design_tracking: document.getElementById('cfgDesignTracking').value,
-      design_case: document.getElementById('cfgDesignCase').value,
-      design_text_color: document.getElementById('cfgDesignTextColor').value,
-      design_highlight_color: document.getElementById('cfgDesignHighlightColor').value,
-      design_highlight_enabled: document.getElementById('cfgDesignHighlightEnabled').value,
-      design_accent_color: document.getElementById('cfgDesignAccentColor').value,
-      design_shadow_type: document.getElementById('cfgDesignShadowType').value,
-      design_shadow_color: document.getElementById('cfgDesignShadowColor').value,
-      design_shadow_size: document.getElementById('cfgDesignShadowSize').value,
-      design_shadow_opacity: document.getElementById('cfgDesignShadowOpacity').value,
-      design_gradient: document.getElementById('cfgDesignGradient').value,
-      design_gradient_opacity: document.getElementById('cfgDesignGradientOpacity').value,
-      design_gradient_coverage: document.getElementById('cfgDesignGradientCoverage').value,
-      design_brand: document.getElementById('cfgDesignBrand').value,
-      design_brand_font: document.getElementById('cfgDesignBrandFont').value,
-      design_brand_size: document.getElementById('cfgDesignBrandSize').value,
-      design_brand_color: document.getElementById('cfgDesignBrandColor').value,
-      design_brand_position: document.getElementById('cfgDesignBrandPosition').value,
-      design_position: document.getElementById('cfgDesignPosition').value,
-      design_fallback_preset: document.getElementById('cfgDesignFallbackPreset').value
-    })
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(_getDesignData())
   }));
+}
+
+async function previewDesign(btn) {
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span>Gerando...';
+  try {
+    const data = _getDesignData();
+    data.preview_text = document.getElementById('cfgDesignPreviewText').value || 'MULTIPLIQUE SEU LUCRO';
+    const resp = await fetchJson('/api/thumb/preview', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(data)
+    });
+    if (resp.image) {
+      document.getElementById('designPreviewImg').src = 'data:image/jpeg;base64,' + resp.image;
+      document.getElementById('designPreviewBox').style.display = 'block';
+    }
+  } catch (e) {
+    alert('Erro ao gerar preview: ' + e);
+  }
+  btn.innerHTML = 'Preview';
+  btn.disabled = false;
 }
 
 function applyThumbPreset(name) {

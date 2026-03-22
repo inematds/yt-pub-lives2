@@ -233,8 +233,43 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             self.handle_clip_retry(data)
         elif post_path == '/api/clip/dismiss-erro':
             self.handle_clip_dismiss_erro(data)
+        elif post_path == '/api/thumb/preview':
+            self.handle_thumb_preview(data)
         else:
             self.send_json(404, {'error': 'not found'})
+
+    def handle_thumb_preview(self, data):
+        """Generate a thumbnail preview with current design settings."""
+        import types, base64
+        try:
+            # Set design env vars from request
+            for key, val in data.items():
+                if key.startswith('design_') and val:
+                    os.environ[key.upper()] = str(val)
+
+            # Load yt-thumbnail module
+            scripts_dir = os.path.join(PROJECT_ROOT, 'scripts')
+            script_path = os.path.join(scripts_dir, 'yt-thumbnail')
+            yt_thumb = types.ModuleType('yt_thumbnail')
+            yt_thumb.__file__ = script_path
+            with open(script_path) as f:
+                exec(compile(f.read(), script_path, 'exec'), yt_thumb.__dict__)
+
+            # Create gradient background
+            bg = yt_thumb.create_gradient_bg()
+
+            # Compose with sample text
+            frase = data.get('preview_text', 'MULTIPLIQUE SEU LUCRO')
+            output_path = '/tmp/thumb_preview.jpg'
+            yt_thumb.compose_thumbnail(bg, frase, '', output_path)
+
+            # Return as base64
+            with open(output_path, 'rb') as f:
+                img_b64 = base64.b64encode(f.read()).decode()
+
+            self.send_json(200, {'image': img_b64})
+        except Exception as e:
+            self.send_json(500, {'error': str(e)})
 
     def send_json(self, code, data):
         self.send_response(code)
