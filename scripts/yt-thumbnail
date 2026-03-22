@@ -537,6 +537,9 @@ def compose_thumbnail(bg, frase_curta, cores_str, output_path):
     design_accent_height = int(os.environ.get('DESIGN_ACCENT_HEIGHT', '5'))
     design_accent_gap = int(os.environ.get('DESIGN_ACCENT_GAP', '30'))
     design_accent_enabled = os.environ.get('DESIGN_ACCENT_ENABLED', 'true') == 'true'
+    design_stroke_enabled = os.environ.get('DESIGN_STROKE_ENABLED', 'false') == 'true'
+    design_stroke_color = hex_to_rgb(os.environ.get('DESIGN_STROKE_COLOR', '#000000'))
+    design_stroke_size = int(os.environ.get('DESIGN_STROKE_SIZE', '2'))
     design_brand = os.environ.get('DESIGN_BRAND', BRAND)
     design_brand_font = os.environ.get('DESIGN_BRAND_FONT', 'dejavu')
     design_brand_size = int(os.environ.get('DESIGN_BRAND_SIZE', '26'))
@@ -659,6 +662,24 @@ def compose_thumbnail(bg, frase_curta, cores_str, output_path):
                 for dy in range(-sz, sz + 1):
                     if dx != 0 or dy != 0:
                         draw.text((lx + dx, y + dy), line, font=cur_font, fill=design_shadow_color)
+
+    # --- Stroke (borda) ---
+    if design_stroke_enabled:
+        for i, line in enumerate(lines):
+            y = y_start + i * design_line_height
+            lx = x_start
+            if 'center' in design_position and 'left' not in design_position and 'right' not in design_position:
+                lw = draw.textbbox((0, 0), line, font=font)[2]
+                lx = int((WIDTH - lw) / 2)
+            cur_font = font
+            if i == len(lines) - 1 and design_last_line_scale > 0:
+                bigger = int(design_font_size * (1 + design_last_line_scale / 100))
+                cur_font = ImageFont.truetype(font_path, bigger)
+            sz = design_stroke_size
+            for dx in range(-sz, sz + 1):
+                for dy in range(-sz, sz + 1):
+                    if abs(dx) + abs(dy) >= sz:  # só bordas externas
+                        draw.text((lx + dx, y + dy), line, font=cur_font, fill=design_stroke_color)
 
     # --- Main text ---
     for i, line in enumerate(lines):

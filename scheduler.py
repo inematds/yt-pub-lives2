@@ -423,6 +423,7 @@ def handle_thumbnail(video_id, title, description, config):
                         'design_text_color', 'design_highlight_color', 'design_highlight_enabled',
                         'design_accent_color', 'design_accent_width',
                         'design_accent_height', 'design_accent_gap', 'design_accent_enabled',
+                        'design_stroke_enabled', 'design_stroke_color', 'design_stroke_size',
                         'design_shadow_type', 'design_shadow_color', 'design_shadow_size',
                         'design_shadow_opacity', 'design_gradient', 'design_gradient_opacity',
                         'design_gradient_coverage', 'design_brand', 'design_brand_font',

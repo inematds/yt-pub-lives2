@@ -1307,6 +1307,30 @@
             <div class="hint">0 = transparente, 255 = opaco total</div>
           </div>
         </div>
+        <div class="config-grid" style="grid-template-columns: 1fr 1fr 1fr 1fr; margin-top:8px;">
+          <div class="config-field">
+            <label>Borda do titulo</label>
+            <select id="cfgDesignStrokeEnabled">
+              <option value="false">Sem borda</option>
+              <option value="true">Com borda</option>
+            </select>
+            <div class="hint">Borda/stroke ao redor das letras do titulo</div>
+          </div>
+          <div class="config-field">
+            <label>Cor da borda</label>
+            <input type="color" id="cfgDesignStrokeColor" value="#000000" oninput="this.title=this.value" style="width:40px;height:32px;border:1px solid var(--border);border-radius:4px;cursor:pointer;">
+            <div class="hint">Cor do contorno ao redor do texto</div>
+          </div>
+          <div class="config-field">
+            <label>Espessura borda (px)</label>
+            <input type="number" id="cfgDesignStrokeSize" value="2" min="1" max="10" step="1">
+            <div class="hint">Grossura da borda em pixels</div>
+          </div>
+          <div class="config-field">
+            <label></label>
+            <div class="hint" style="padding-top:8px;">Borda é diferente de sombra: contorna cada letra individualmente</div>
+          </div>
+        </div>
       </div>
 
       <div class="config-section">
@@ -1717,6 +1741,7 @@ function _getDesignData() {
     design_highlight_enabled: g('cfgDesignHighlightEnabled'), design_accent_color: g('cfgDesignAccentColor'),
     design_accent_width: g('cfgDesignAccentWidth'), design_accent_height: g('cfgDesignAccentHeight'),
     design_accent_gap: g('cfgDesignAccentGap'), design_accent_enabled: g('cfgDesignAccentEnabled'),
+    design_stroke_enabled: g('cfgDesignStrokeEnabled'), design_stroke_color: g('cfgDesignStrokeColor'), design_stroke_size: g('cfgDesignStrokeSize'),
     design_shadow_type: g('cfgDesignShadowType'), design_shadow_color: g('cfgDesignShadowColor'),
     design_shadow_size: g('cfgDesignShadowSize'), design_shadow_opacity: g('cfgDesignShadowOpacity'),
     design_gradient: g('cfgDesignGradient'), design_gradient_opacity: g('cfgDesignGradientOpacity'),
@@ -2602,6 +2627,9 @@ async function loadConfig() {
   setVal('cfgDesignAccentHeight', c.design_accent_height);
   setVal('cfgDesignAccentGap', c.design_accent_gap);
   setVal('cfgDesignAccentEnabled', c.design_accent_enabled);
+  setVal('cfgDesignStrokeEnabled', c.design_stroke_enabled);
+  if (c.design_stroke_color) setVal('cfgDesignStrokeColor', c.design_stroke_color);
+  setVal('cfgDesignStrokeSize', c.design_stroke_size);
   setVal('cfgDesignShadowType', c.design_shadow_type);
   if (c.design_shadow_color) setVal('cfgDesignShadowColor', c.design_shadow_color);
   setVal('cfgDesignShadowSize', c.design_shadow_size);
