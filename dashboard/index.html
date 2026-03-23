@@ -2008,6 +2008,15 @@ function applyThumbPreset(name) {
   s('cfgDesignBrandColor', p.brandColor); s('cfgDesignBrandColorHex', p.brandColor);
   s('cfgDesignBrandPosition', p.brandPosition);
   s('cfgDesignPosition', p.position);
+  // Accent defaults
+  s('cfgDesignAccentWidth', p.accentWidth || 250);
+  s('cfgDesignAccentHeight', p.accentHeight || 5);
+  s('cfgDesignAccentGap', p.accentGap || 30);
+  s('cfgDesignAccentEnabled', p.accentEnabled || 'true');
+  // Stroke defaults
+  s('cfgDesignStrokeEnabled', p.strokeEnabled || 'false');
+  s('cfgDesignStrokeColor', p.strokeColor || '#000000');
+  s('cfgDesignStrokeSize', p.strokeSize || 2);
 }
 
 // --- Hour Picker ---
