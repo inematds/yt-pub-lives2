@@ -500,6 +500,41 @@ def handle_thumbnail(video_id, title, description, config):
 
             img.save(thumb_path, 'JPEG', quality=92)
 
+        elif thumb_mode == 'fallback':
+            # Fallback: gradiente escuro + texto com design configurado
+            log(f'  Generating fallback thumbnail for {video_id}')
+            # Set design config env vars
+            for key in ('design_font', 'design_font_size', 'design_last_line_scale',
+                        'design_line_height', 'design_tracking', 'design_case',
+                        'design_text_color', 'design_highlight_color', 'design_highlight_enabled',
+                        'design_accent_color', 'design_accent_width',
+                        'design_accent_height', 'design_accent_gap', 'design_accent_enabled',
+                        'design_stroke_enabled', 'design_stroke_color', 'design_stroke_size',
+                        'design_shadow_type', 'design_shadow_color', 'design_shadow_size',
+                        'design_shadow_opacity', 'design_gradient', 'design_gradient_opacity',
+                        'design_gradient_coverage', 'design_brand', 'design_brand_font',
+                        'design_brand_size', 'design_brand_color', 'design_brand_position',
+                        'design_position', 'design_fallback_preset'):
+                val = config.get(key, '')
+                if val:
+                    os.environ[key.upper()] = val
+
+            import types
+            script_path = os.path.join(SCRIPTS_DIR, 'yt-thumbnail')
+            yt_thumb = types.ModuleType('yt_thumbnail')
+            yt_thumb.__file__ = script_path
+            with open(script_path) as _f:
+                exec(compile(_f.read(), script_path, 'exec'), yt_thumb.__dict__)
+
+            # Aplicar preset de fallback se configurado
+            fallback_preset = config.get('design_fallback_preset', '')
+            if fallback_preset and fallback_preset in yt_thumb.PRESETS:
+                for k, v in yt_thumb.PRESETS[fallback_preset].items():
+                    os.environ[k] = v
+
+            bg = yt_thumb.create_gradient_bg()
+            yt_thumb.compose_thumbnail(bg, title[:70], '', thumb_path)
+
         else:
             log(f'  Unknown thumb_mode: {thumb_mode}, skipping')
             return
